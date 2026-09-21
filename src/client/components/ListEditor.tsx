@@ -1,6 +1,6 @@
 import { useState, type FormEvent } from 'react';
 import type { Collection } from '../../shared/schema';
-import { saveList } from '../store';
+import { deleteList, saveList } from '../store';
 import { Button } from './ui/button';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from './ui/dialog';
 import { Input } from './ui/input';
@@ -10,14 +10,27 @@ export function ListEditor({
   list,
   close,
   saved,
+  deleted,
 }: {
   list?: Collection;
   close: () => void;
   saved: (list: Collection) => void;
+  deleted?: (list: Collection) => void;
 }) {
   const [label, setLabel] = useState(list?.label ?? '');
   const [color, setColor] = useState(list?.color ?? colors[0]);
   const [error, setError] = useState('');
+  const [confirming, setConfirming] = useState(false);
+  function remove() {
+    if (!list) return;
+    try {
+      deleteList(list.id);
+      deleted?.(list);
+      close();
+    } catch (error) {
+      setError(error instanceof Error ? error.message : 'Could not delete this list.');
+    }
+  }
   function submit(event: FormEvent) {
     event.preventDefault();
     try {
@@ -79,6 +92,16 @@ export function ListEditor({
           <Button type="submit" className="mt-3" disabled={!label.trim()}>
             {list ? 'Save changes' : 'Create list'}
           </Button>
+          {list && (
+            <Button
+              type="button"
+              variant={confirming ? 'destructive' : 'ghost'}
+              className={confirming ? undefined : 'text-destructive'}
+              onClick={() => (confirming ? remove() : setConfirming(true))}
+            >
+              {confirming ? 'Delete list — its dumps get re-sorted' : 'Delete list'}
+            </Button>
+          )}
         </form>
       </DialogContent>
     </Dialog>

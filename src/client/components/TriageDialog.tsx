@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { Asterisk, ChevronRight, Trash2 } from 'lucide-react';
-import { LISTS, type Collection, type Dump } from '../../shared/schema';
+import type { Collection, Dump } from '../../shared/schema';
 import type { DumpActions } from './DumpCard';
 import { ListDot } from './ListDot';
 import { Button } from './ui/button';
@@ -30,8 +30,9 @@ export function TriageDialog({
       )
         return;
       if (!current) return;
-      const list = LISTS.find((list) => list.shortcut === event.key.toLowerCase());
-      if (list && lists.some((item) => item.id === list.id)) {
+      // 1–9 pick the first nine lists in sidebar order; every list also has a button.
+      const list = /^[1-9]$/.test(event.key) ? lists[Number(event.key) - 1] : undefined;
+      if (list) {
         event.preventDefault();
         actions.file(current, list.id);
       }
@@ -69,7 +70,7 @@ export function TriageDialog({
               {current.text}
             </p>
             <div className="flex flex-wrap gap-2">
-              {lists.map((list) => (
+              {lists.map((list, index) => (
                 <Button
                   variant="outline"
                   key={list.id}
@@ -78,6 +79,11 @@ export function TriageDialog({
                 >
                   <ListDot color={list.color} />
                   {list.label}
+                  {index < 9 && (
+                    <kbd className="ml-0.5 text-[10px] text-muted-foreground [font:inherit]">
+                      {index + 1}
+                    </kbd>
+                  )}
                 </Button>
               ))}
             </div>

@@ -1,4 +1,4 @@
-import { ArrowRight, ArrowUp, Asterisk, Check, Cloud, Inbox, Layers3, Search } from 'lucide-react';
+import { ArrowRight, ArrowUp, Asterisk, Check, Cloud, Inbox, Search, Sparkles } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { Brand } from './components/Brand';
 import { ListDot } from './components/ListDot';
@@ -12,10 +12,10 @@ const features = [
     body: 'Thoughts, links, to-dos, or a sentence that isn’t quite an idea yet. No form to fill out. Just get it down.',
   },
   {
-    Icon: Layers3,
-    step: '02 — MAKE A LITTLE ROOM',
-    title: 'A place, at your pace.',
-    body: 'Leave things in your inbox or make your own lists. See them side by side, arranged the way your mind works.',
+    Icon: Sparkles,
+    step: '02 — LET IT SORT ITSELF',
+    title: 'It finds its own place.',
+    body: 'Dump reads each new thought and files it into the list that fits: Ideas, Buy, Watch, or your own. Not sure? It goes to To do. Move anything yourself and your choice wins.',
   },
   {
     Icon: Cloud,
@@ -59,8 +59,8 @@ export default function Marketing() {
           </h1>
           <p className="mb-7.25 text-[14px] leading-[1.9] text-muted-foreground max-phone:text-[12px]">
             The book someone mentioned. A half-formed idea. That link for later.
-            <br className="max-phone:hidden" /> Put it all in Dump. Give it a home when you feel
-            like it.
+            <br className="max-phone:hidden" /> Put it all in Dump. It files each one into the right
+            list for you.
           </p>
           <Button asChild size="lg" className="px-5.5 py-6 text-[12px] has-[>svg]:px-5.5">
             <Link to="/">
@@ -69,7 +69,7 @@ export default function Marketing() {
             </Link>
           </Button>
           <small className="mt-3.75 block text-[10px] text-muted-foreground">
-            Capture first. Organize optionally.
+            Capture first. Dump does the sorting.
           </small>
         </section>
         <section
@@ -94,22 +94,22 @@ export default function Marketing() {
                 {
                   name: 'Inbox',
                   color: '#a799b8',
-                  items: ['A Sunday with no plans.', 'What if the best ideas happen on a walk?'],
+                  items: [{ text: 'That film everyone keeps talking about', sorting: true }],
                 },
                 {
                   name: 'Ideas',
                   color: '#9b84d6',
                   items: [
-                    'A tiny reading nook by the window',
-                    'Make something just for the fun of it.',
+                    { text: 'A tiny reading nook by the window', sorting: false },
+                    { text: 'What if the best ideas happen on a walk?', sorting: false },
                   ],
                 },
                 {
-                  name: 'For later',
-                  color: '#849c74',
+                  name: 'Watch',
+                  color: '#6395c3',
                   items: [
-                    'The little bookshop on the corner',
-                    'That film everyone keeps talking about',
+                    { text: 'The documentary about the lighthouse keeper', sorting: false },
+                    { text: 'Rewatch the one with the train at the end', sorting: false },
                   ],
                 },
               ].map((column) => (
@@ -117,16 +117,28 @@ export default function Marketing() {
                   <h2 className="mb-3.25 ml-1 flex items-center gap-1.75 text-[11px]">
                     <ListDot color={column.color} />
                     {column.name}
-                    <span className="ml-auto text-[9px] text-muted-foreground">2</span>
+                    <span className="ml-auto text-[9px] text-muted-foreground">
+                      {column.items.length}
+                    </span>
                   </h2>
                   {column.items.map((item) => (
                     <div
                       className="mb-2.5 rounded-[9px] border bg-card px-3.25 py-4.25 text-[12px] leading-[1.65] max-phone:px-2.5 max-phone:py-3 max-phone:text-[10px]"
-                      key={item}
+                      key={item.text}
                     >
-                      {item}
-                      <small className="mt-3.75 block text-[8px] text-muted-foreground max-phone:text-[7px]">
-                        Saved for a quieter moment
+                      {item.text}
+                      <small className="mt-3.75 flex items-center gap-1.25 text-[8px] text-muted-foreground max-phone:text-[7px]">
+                        {item.sorting ? (
+                          <>
+                            <span className="size-1.5 rounded-full bg-ring motion-safe:animate-pulse" />
+                            Sorting…
+                          </>
+                        ) : (
+                          <>
+                            <Sparkles size={9} />
+                            Filed by Dump
+                          </>
+                        )}
                       </small>
                     </div>
                   ))}

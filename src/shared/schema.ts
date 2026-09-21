@@ -1,11 +1,11 @@
 import { z } from 'zod';
 
 export const LISTS = [
-  { id: 'ideas', label: 'Ideas', shortcut: 'i', color: '#9b84d6' },
-  { id: 'buy', label: 'Buy', shortcut: 'b', color: '#c49651' },
-  { id: 'watch', label: 'Watch', shortcut: 'w', color: '#6395c3' },
-  { id: 'decor', label: 'Decor', shortcut: 'd', color: '#849c74' },
-  { id: 'todo', label: 'To do', shortcut: 't', color: '#cd7f86' },
+  { id: 'ideas', label: 'Ideas', color: '#9b84d6' },
+  { id: 'buy', label: 'Buy', color: '#c49651' },
+  { id: 'watch', label: 'Watch', color: '#6395c3' },
+  { id: 'decor', label: 'Decor', color: '#849c74' },
+  { id: 'todo', label: 'To do', color: '#cd7f86' },
 ] as const;
 
 export const listSchema = z.string().regex(/^[a-z0-9][a-z0-9-]{0,63}$/);

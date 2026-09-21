@@ -1,9 +1,19 @@
 import { Hono } from 'hono';
-import type { Env } from './env';
+import { jevKey, type Env } from './env';
 import { pingSchema } from '../shared/api';
+import { classifyRequestSchema, jevRequest, readJevResponse } from '../shared/classify';
 export { DumpDO } from './dump-do';
 
 const app = new Hono<{ Bindings: Env }>();
+
+// The app is public, so this route spends the Jev key for anyone who calls it. A per-isolate
+// budget is a coarse brake, not a quota; removing JEV_API_KEY turns the route off.
+const CLASSIFY_PER_MINUTE = 60;
+let classifyWindow = { start: 0, count: 0 };
+function classifyAllowed(now = Date.now()) {
+  if (now - classifyWindow.start >= 60_000) classifyWindow = { start: now, count: 0 };
+  return ++classifyWindow.count <= CLASSIFY_PER_MINUTE;
+}
 
 app.use('*', async (c, next) => {
   if (c.req.path.startsWith('/api/')) {
@@ -23,7 +33,30 @@ const routes = app
   .get('/api/ping', (c) => {
     const hostname = new URL(c.req.url).hostname;
     const mode = ['localhost', '127.0.0.1', '[::1]'].includes(hostname) ? 'local' : 'cloud';
-    return c.json(pingSchema.parse({ ok: true, mode }));
+    const classify = !!jevKey(c.env);
+    return c.json(pingSchema.parse({ ok: true, mode, classify }));
+  })
+  // Stateless proxy to Jev: the browser cannot call it directly (CORS) or hold the key.
+  .post('/api/classify', async (c) => {
+    const key = jevKey(c.env);
+    if (!key) return c.json({ error: 'Classification is off.' }, 503);
+    if (!classifyAllowed()) return c.json({ error: 'Too many requests.' }, 429);
+    const parsed = classifyRequestSchema.safeParse(await c.req.json().catch(() => null));
+    if (!parsed.success) return c.json({ error: 'Invalid request.' }, 400);
+    const response = await fetch('https://api.typesafe.ai/v1/systemone', {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${key}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(jevRequest(parsed.data)),
+      signal: AbortSignal.timeout(3_000),
+    });
+    if (!response.ok) {
+      console.error('Jev request failed:', response.status);
+      return c.json({ error: 'Classification failed.' }, 502);
+    }
+    return c.json(readJevResponse(await response.json(), parsed.data));
   })
   // TinyBase WebSocket sync. Browsers send Origin on upgrades, so the check above applies.
   .get('/api/sync', async (c) => {

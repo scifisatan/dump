@@ -14,15 +14,18 @@ npm run dev
 
 Open http://127.0.0.1:6191. The same process runs the client, Worker, and SQLite-backed Durable Object. Local data stays in this browser and `.wrangler/state`; it is not your production database.
 
+Automatic filing with [Jev](https://typesafe.ai/blog/introducing-system-one-models-and-jev) is optional. Put `JEV_API_KEY=...` in `.env.local` (gitignored) to turn it on locally. Without a key, or with fewer than two lists, new dumps stay in the inbox for you to sort.
+
 ## Use it
 
 - Type a thought or URL and press Enter. Shift+Enter adds a line.
 - `!buy warm floor lamp #reading` files to Buy and adds the reading tag.
-- Start in Inbox or open Board to see lists side by side. Drag column handles or use their Move left/right menu buttons to reorder them.
-- Create lists from the sidebar. Rename/recolor them from the list heading or board menu. Lists and their order sync across devices.
+- With Jev configured, other dumps show "Sorting…" for a moment, then move into the list Jev picks (or To do when it is unsure). Filing one yourself first always wins.
+- The composer sits at the bottom of every view, like a chat; the newest dumps appear just above it. Press `/` to jump to it.
+- Create lists from the sidebar. Rename/recolor them from the pencil in the list header. Lists sync across devices.
 - Default prefixes: `!ideas`, `!buy`, `!watch`, `!decor`, `!todo`. Custom list names with spaces use hyphens, for example `!weekend-plans` (ASCII letters/digits/hyphens).
 - Ctrl/Cmd+K opens search for thoughts, links, tags, lists, and navigation. File with each card's action menu.
-- Sort inbox offers buttons and `i / b / w / d / t`, Right Arrow skips, Backspace removes.
+- Sort inbox shows a button for every list; `1`–`9` pick the first nine lists, Right Arrow skips, Backspace removes.
 - Done and remove are final; there is no undo. Removal leaves a hidden sync tombstone so other copies don't bring the item back.
 - Settings contains Light/Dark/System appearance and backups. Export includes dumps and lists. Import restores missing IDs and keeps existing records.
 - `/marketing` is the public landing page. It uses illustrative content and does not initialize the notebook on a direct visit.
@@ -34,8 +37,9 @@ Offline reload works in a built/installed version after a successful first load;
 Target: `https://dump.abishrestha.com.np`.
 
 1. Sign in using `npx wrangler login`.
-2. Run `npm run deploy`. It runs the checks, builds in production mode, and deploys through Wrangler. Custom Domain routing provisions the hostname through Cloudflare. `workers.dev` and preview URLs are disabled.
-3. Verify the public hostname, phone-to-desktop sync, and offline reload/reconnect. Anyone who can reach the hostname shares the same single-user data store.
+2. Optional: enable automatic filing with `npx wrangler secret put JEV_API_KEY`. Without it, dumps stay in the inbox. To turn it off later, run `npx wrangler secret delete JEV_API_KEY`.
+3. Run `npm run deploy`. It runs the checks, builds in production mode, and deploys through Wrangler. Custom Domain routing provisions the hostname through Cloudflare. `workers.dev` and preview URLs are disabled.
+4. Verify the public hostname, phone-to-desktop sync, and offline reload/reconnect. Anyone who can reach the hostname shares the same single-user data store.
 
 ## Checks
 

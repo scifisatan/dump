@@ -18,6 +18,7 @@ import {
   type Collection,
   type Dump,
 } from '../shared/schema';
+import { ClassifyUnavailable, classifyRequest, requestList } from './classify';
 import { newStore, readRows, SYNC_FRAGMENT_BYTES, SYNC_TIMEOUT_SECONDS } from '../shared/merge';
 
 export const store = newStore();
@@ -31,6 +32,8 @@ type Snapshot = {
   sync: SyncState;
   localServer: boolean;
   syncError: string | null;
+  // Dumps waiting for Jev to choose their list.
+  sorting: ReadonlySet<string>;
 };
 let snapshot: Snapshot = {
   ready: false,
@@ -41,6 +44,7 @@ let snapshot: Snapshot = {
   sync: 'connecting',
   localServer: false,
   syncError: null,
+  sorting: new Set(),
 };
 const listeners = new Set<() => void>();
 const emit = (patch: Partial<Snapshot> = {}) => {
@@ -114,6 +118,7 @@ export function initializeStore(): Promise<void> {
     window.addEventListener('online', () => {
       retryDelay = 1000;
       void syncNow();
+      checkClassify();
     });
     window.addEventListener('offline', () => {
       disconnect();
@@ -127,16 +132,25 @@ export function initializeStore(): Promise<void> {
       if (document.visibilityState === 'visible') void syncNow();
       else void persister.save();
     });
-    void api.api.ping
-      .$get({})
-      .then(async (response) => {
-        if (response.ok && response.headers.get('content-type')?.includes('application/json')) {
-          emit({ localServer: (await response.json()).mode === 'local' });
-        }
-      })
-      .catch(() => {});
+    checkClassify();
     void syncNow();
   })());
+}
+
+// Learns whether this deployment has Jev, then sorts anything still unfiled. Until the answer
+// arrives (for example while offline), new dumps simply wait unfiled.
+function checkClassify() {
+  void api.api.ping
+    .$get({})
+    .then(async (response) => {
+      if (response.ok && response.headers.get('content-type')?.includes('application/json')) {
+        const ping = await response.json();
+        classify = ping.classify ? 'on' : 'off';
+        emit({ localServer: ping.mode === 'local' });
+        sortUnfiled();
+      }
+    })
+    .catch(() => {});
 }
 
 function disconnect() {
@@ -203,11 +217,84 @@ function scheduleReconnect() {
   retryDelay = Math.min(retryDelay * 2, 30_000);
 }
 
+// Capture is synchronous and usually unfiled; Jev chooses the list afterwards (see autoFile).
+// An explicit !list prefix files it immediately.
 export function capture(raw: string) {
   if (!snapshot.ready) throw new Error('Still opening your notebook.');
   const dump = makeDump(raw, crypto.randomUUID(), Date.now(), snapshot.lists);
   store.setRow('dumps', dump.id, { data: encodeDump(dump) });
+  if (!dump.list) queueMicrotask(() => autoFile(dump.id));
   return dump;
+}
+
+// With Jev configured, every dump ends up in a list: Jev's choice, else To do. Unfiled open
+// dumps are the durable queue, so a closed tab or failed request is retried on the next load
+// or reconnect. Without Jev, or with fewer than two lists, dumps stay in the inbox for the
+// owner to sort (Sort inbox).
+export const DEFAULT_LIST = 'todo';
+let classify: 'unknown' | 'on' | 'off' = 'unknown';
+const queue: string[] = [];
+let active = 0;
+
+const needsList = (dump: Dump | undefined): dump is Dump =>
+  !!dump && !dump.list && !dump.deleted && !dump.done && dump.classified_by === null;
+const findDump = (id: string) => snapshot.dumps.find((dump) => dump.id === id);
+const listExists = (id: string | null) =>
+  snapshot.lists.some((list) => list.id === id && !list.deleted);
+// With fewer than two lists there is no real choice to make, so dumps stay in the inbox.
+const jevUseful = () =>
+  classify === 'on' && snapshot.lists.filter((list) => !list.deleted).length >= 2;
+
+function sortUnfiled() {
+  for (const dump of snapshot.dumps) if (needsList(dump)) autoFile(dump.id, false);
+}
+
+function autoFile(id: string, first = true) {
+  if (!jevUseful() || !needsList(findDump(id))) return;
+  if (snapshot.sorting.has(id) || queue.includes(id)) return;
+  // New captures jump ahead of a backlog sweep.
+  if (first) queue.unshift(id);
+  else queue.push(id);
+  emit({ sorting: new Set([...snapshot.sorting, id]) });
+  pump();
+}
+
+function pump() {
+  while (active < 3) {
+    const id = queue.shift();
+    if (id === undefined) return;
+    active++;
+    void sortOne(id).finally(() => {
+      active--;
+      const sorting = new Set(snapshot.sorting);
+      sorting.delete(id);
+      emit({ sorting });
+      pump();
+    });
+  }
+}
+
+async function sortOne(id: string) {
+  const dump = findDump(id);
+  if (!needsList(dump)) return;
+  if (!jevUseful()) return;
+  const request = classifyRequest(dump.text, snapshot.lists);
+  let list: string | null = null;
+  // A bare link has nothing for Jev to judge, so it goes straight to the fallback.
+  if (request) {
+    if (!navigator.onLine) return; // Retried when the connection returns.
+    try {
+      list = await requestList(request);
+    } catch (error) {
+      // Turned off on the server: leave it in the inbox. Otherwise retry on the next load.
+      if (error instanceof ClassifyUnavailable) classify = 'off';
+      return;
+    }
+  }
+  // The owner may have filed, completed or removed it while Jev was thinking; they win.
+  if (!needsList(findDump(id))) return;
+  if (listExists(list)) updateDump(id, { list, classified_by: 'ai' });
+  else if (listExists(DEFAULT_LIST)) updateDump(id, { list: DEFAULT_LIST });
 }
 
 export function updateDump(
@@ -246,21 +333,24 @@ export function saveList(label: string, color: string, id?: string) {
   return list;
 }
 
-export function moveList(id: string, destination: number) {
-  const lists = snapshot.lists.filter((list) => !list.deleted);
-  const current = lists.find((list) => list.id === id);
-  if (!current) return;
-  const others = lists.filter((list) => list.id !== id);
-  const index = Math.max(0, Math.min(destination, others.length));
-  const before = others[index - 1]?.position;
-  const after = others[index]?.position;
-  const position =
-    before === undefined
-      ? (after ?? 0) - 1
-      : after === undefined
-        ? before + 1
-        : (before + after) / 2;
-  store.setRow('lists', id, { data: encodeCollection({ ...current, position }) });
+// Tombstones the list and moves its dumps (open and done) back to the inbox.
+export function deleteList(id: string) {
+  if (!snapshot.ready) throw new Error('Still opening your notebook.');
+  const list = snapshot.lists.find((item) => item.id === id);
+  if (!list) return;
+  store.transaction(() => {
+    store.setRow('lists', id, { data: encodeCollection({ ...list, deleted: true }) });
+    for (const dump of snapshot.dumps) if (dump.list === id) updateDump(dump.id, { list: null });
+  });
+}
+
+// Tombstones every completed dump; returns how many were cleared.
+export function clearDone() {
+  const done = snapshot.dumps.filter((dump) => dump.done && !dump.deleted);
+  store.transaction(() => {
+    for (const dump of done) updateDump(dump.id, { deleted: true });
+  });
+  return done.length;
 }
 
 export function exportDumps() {

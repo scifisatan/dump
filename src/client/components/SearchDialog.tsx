@@ -1,4 +1,4 @@
-import { FileText, Inbox, LayoutDashboard, ListFilter, Settings } from 'lucide-react';
+import { CheckCheck, FileText, Inbox, ListFilter, Settings } from 'lucide-react';
 import type { Collection, Dump } from '../../shared/schema';
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from './ui/dialog';
 import {
@@ -60,9 +60,9 @@ export function SearchDialog({
                 <Inbox />
                 Inbox
               </CommandItem>
-              <CommandItem value="Open board dashboard" onSelect={() => go('/board')}>
-                <LayoutDashboard />
-                Board
+              <CommandItem value="Open done completed" onSelect={() => go('/done')}>
+                <CheckCheck />
+                Done
               </CommandItem>
               <CommandItem
                 value="Open settings appearance import export"

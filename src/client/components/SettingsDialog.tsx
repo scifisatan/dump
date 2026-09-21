@@ -78,6 +78,9 @@ export function SettingsDialog({
           <p className={note}>
             This deployment is public. Anyone with the address can access the shared space.
           </p>
+          <a href="/marketing" className="text-[11px] text-accent-foreground hover:underline">
+            A little about Dump ↗
+          </a>
         </section>
         <section className={section}>
           <h3 className={heading}>A few handy shortcuts</h3>

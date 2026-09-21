@@ -1,4 +1,4 @@
-import React, { lazy, Suspense } from 'react';
+import React, { lazy, Suspense, useSyncExternalStore } from 'react';
 import ReactDOM from 'react-dom/client';
 import { registerSW } from 'virtual:pwa-register';
 import { Toaster, toast } from 'sonner';
@@ -9,11 +9,21 @@ import './styles.css';
 
 const App = lazy(() => import('./App'));
 const Marketing = lazy(() => import('./Marketing'));
+// Matches Tailwind's `phone` breakpoint (47.5rem).
+const phoneQuery = window.matchMedia('(max-width: 47.4375rem)');
+const subscribePhone = (listener: () => void) => {
+  phoneQuery.addEventListener('change', listener);
+  return () => phoneQuery.removeEventListener('change', listener);
+};
 function Notifications() {
   const { resolvedTheme } = useTheme();
+  const phone = useSyncExternalStore(subscribePhone, () => phoneQuery.matches);
   return (
     <Toaster
-      position="bottom-center"
+      // Sit just below the app header so its actions and sync status stay reachable.
+      position={phone ? 'top-center' : 'top-right'}
+      offset={{ top: 76, right: 24 }}
+      mobileOffset={{ top: 64, left: 12, right: 12 }}
       theme={resolvedTheme === 'dark' ? 'dark' : 'light'}
       closeButton
       richColors
