@@ -1,4 +1,8 @@
-# Dump
+<p align="center">
+  <img src="public/favicon.svg" alt="Dump logo" width="96" height="96">
+</p>
+
+<h1 align="center">Dump</h1>
 
 A capture-first home for thoughts and links. Type something, press Enter, and it is saved. Organizing it can wait, and with [Jev](#why-jev) switched on the app files it for you.
 
