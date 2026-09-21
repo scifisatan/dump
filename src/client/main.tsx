@@ -29,12 +29,10 @@ class ErrorBoundary extends React.Component<React.PropsWithChildren, { error: bo
   render() {
     if (this.state.error)
       return (
-        <main className="fatal">
+        <main className="grid min-h-dvh place-content-center gap-5 text-center text-muted-foreground">
           <h1>Let’s reopen your space.</h1>
           <p>The page ran into a problem. Your saved dumps are still in this browser.</p>
-          <button className="primary" onClick={() => location.reload()}>
-            Reload Dump
-          </button>
+          <button onClick={() => location.reload()}>Reload Dump</button>
         </main>
       );
     return this.props.children;
@@ -52,7 +50,13 @@ ReactDOM.createRoot(document.getElementById('root')!).render(
     >
       <ErrorBoundary>
         <BrowserRouter>
-          <Suspense fallback={<div className="loading-space">Opening a little headspace…</div>}>
+          <Suspense
+            fallback={
+              <div className="grid min-h-dvh place-content-center gap-5 text-center text-muted-foreground">
+                Opening a little headspace…
+              </div>
+            }
+          >
             <Routes>
               <Route path="/marketing" element={<Marketing />} />
               <Route path="*" element={<App />} />

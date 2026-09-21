@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { Asterisk, ChevronRight, RotateCcw, Trash2 } from 'lucide-react';
 import { LISTS, type Collection, type Dump } from '../../shared/schema';
 import type { DumpActions } from './DumpCard';
+import { ListDot } from './ListDot';
 import { Button } from './ui/button';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from './ui/dialog';
 
@@ -61,7 +62,7 @@ export function TriageDialog({
         if (!open) close();
       }}
     >
-      <DialogContent className="triage-dialog">
+      <DialogContent>
         <DialogHeader>
           <DialogTitle>A little sorting session.</DialogTitle>
           <DialogDescription>
@@ -72,20 +73,23 @@ export function TriageDialog({
         </DialogHeader>
         {current ? (
           <>
-            <p className="triage-thought">{current.text}</p>
-            <div className="triage-options">
+            <p className="py-3 text-[22px] leading-[1.6] whitespace-pre-wrap wrap-anywhere">
+              {current.text}
+            </p>
+            <div className="flex flex-wrap gap-2">
               {lists.map((list) => (
                 <Button
                   variant="outline"
                   key={list.id}
+                  className="text-[12px]"
                   onClick={() => actions.file(current, list.id)}
                 >
-                  <span className="list-dot" style={{ background: list.color }} />
+                  <ListDot color={list.color} />
                   {list.label}
                 </Button>
               ))}
             </div>
-            <div className="triage-footer">
+            <div className="flex justify-between gap-1 border-t pt-3.75 *:text-[11px]">
               <Button variant="ghost" disabled={!canUndo} onClick={undo}>
                 <RotateCcw />
                 Undo
@@ -101,7 +105,7 @@ export function TriageDialog({
             </div>
           </>
         ) : (
-          <div className="triage-complete">
+          <div className="grid justify-items-center gap-4.5 p-5 text-accent-foreground">
             <Asterisk size={48} />
             <Button onClick={close}>Back to my space</Button>
             <Button variant="ghost" disabled={!canUndo} onClick={undo}>

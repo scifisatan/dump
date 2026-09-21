@@ -43,8 +43,10 @@ export function ListEditor({
               : 'Start with a name. You can change it whenever you like.'}
           </DialogDescription>
         </DialogHeader>
-        <form onSubmit={submit} className="list-form">
-          <label htmlFor="list-name">List name</label>
+        <form onSubmit={submit} className="grid gap-3.25">
+          <label htmlFor="list-name" className="text-[12px]">
+            List name
+          </label>
           <Input
             id="list-name"
             value={label}
@@ -54,12 +56,13 @@ export function ListEditor({
             placeholder="Books, weekend plans, someday…"
           />
           <fieldset>
-            <legend>Color</legend>
-            <div className="color-options">
+            <legend className="mt-2 mb-3 text-[12px]">Color</legend>
+            <div className="flex gap-3.25 p-1.25">
               {colors.map((value) => (
                 <button
                   key={value}
                   type="button"
+                  className="size-6.75 rounded-full aria-pressed:outline-2 aria-pressed:outline-offset-4 aria-pressed:outline-ring"
                   style={{ background: value }}
                   aria-label={`Color ${value}`}
                   aria-pressed={color === value}
@@ -69,11 +72,11 @@ export function ListEditor({
             </div>
           </fieldset>
           {error && (
-            <p role="alert" className="form-error">
+            <p role="alert" className="text-[12px] text-destructive">
               {error}
             </p>
           )}
-          <Button type="submit" disabled={!label.trim()}>
+          <Button type="submit" className="mt-3" disabled={!label.trim()}>
             {list ? 'Save changes' : 'Create list'}
           </Button>
         </form>

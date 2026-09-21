@@ -38,7 +38,10 @@ export function SearchDialog({
   }
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="search-dialog" showCloseButton={false}>
+      <DialogContent
+        className="max-w-[min(620px,calc(100%-32px))] gap-0 p-0 max-phone:p-0 sm:max-w-[min(620px,calc(100%-32px))]"
+        showCloseButton={false}
+      >
         <DialogTitle className="sr-only">Find something in your space</DialogTitle>
         <DialogDescription className="sr-only">
           Search thoughts, links, tags, and lists. Use arrow keys to choose a result.
@@ -97,9 +100,9 @@ export function SearchDialog({
                   }}
                 >
                   <FileText />
-                  <span className="search-result">
-                    <span>{dump.text}</span>
-                    <small>
+                  <span className="grid min-w-0 gap-0.75">
+                    <span className="truncate">{dump.text}</span>
+                    <small className="text-[10px] text-muted-foreground">
                       {dump.done
                         ? 'Done'
                         : (lists.find((list) => list.id === dump.list)?.label ?? 'Inbox')}
@@ -109,7 +112,7 @@ export function SearchDialog({
               ))}
             </CommandGroup>
           </CommandList>
-          <div className="search-footer">
+          <div className="flex items-center justify-between border-t px-5 py-3 text-[10px] text-muted-foreground">
             <span>↑ ↓ to explore · Enter to open</span>
             <kbd>esc</kbd>
           </div>

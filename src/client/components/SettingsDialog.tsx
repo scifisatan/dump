@@ -6,6 +6,11 @@ import { exportDumps, importDumps } from '../store';
 import { Button } from './ui/button';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from './ui/dialog';
 
+const section = 'border-t pt-4.75 max-phone:pt-4';
+const heading = 'mb-3 text-[12px] font-[550]';
+const note = 'my-2.5 text-[11px] leading-[1.8] text-muted-foreground';
+const shortcut = 'flex items-center justify-between gap-3 py-1.5';
+
 export function SettingsDialog({
   open,
   onOpenChange,
@@ -19,14 +24,14 @@ export function SettingsDialog({
   const importRef = useRef<HTMLInputElement>(null);
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="settings-dialog">
+      <DialogContent>
         <DialogHeader>
           <DialogTitle>Your space, your way.</DialogTitle>
           <DialogDescription>A few small things to make yourself at home.</DialogDescription>
         </DialogHeader>
-        <section className="settings-section">
-          <h3>Appearance</h3>
-          <div className="theme-options">
+        <section className={section}>
+          <h3 className={heading}>Appearance</h3>
+          <div className="flex flex-wrap gap-2.25">
             {[
               { id: 'light', label: 'Light', Icon: Sun },
               { id: 'dark', label: 'Dark', Icon: Moon },
@@ -35,6 +40,7 @@ export function SettingsDialog({
               <Button
                 key={id}
                 variant={theme === id ? 'secondary' : 'outline'}
+                className="flex-1 text-[12px] max-phone:p-2 max-phone:text-[11px]"
                 aria-pressed={theme === id}
                 onClick={() => setTheme(id)}
               >
@@ -43,15 +49,15 @@ export function SettingsDialog({
               </Button>
             ))}
           </div>
-          <p>Saved on this device.</p>
+          <p className={note}>Saved on this device.</p>
         </section>
-        <section className="settings-section">
-          <h3>Your data</h3>
-          <p>
+        <section className={section}>
+          <h3 className={heading}>Your data</h3>
+          <p className={note}>
             Take a copy with you. Import adds missing thoughts and lists without replacing existing
             records.
           </p>
-          <div className="settings-actions">
+          <div className="flex flex-wrap gap-2.25 *:text-[11px]">
             <Button
               variant="outline"
               onClick={exportDumps}
@@ -67,32 +73,34 @@ export function SettingsDialog({
             </Button>
           </div>
         </section>
-        <section className="settings-section">
-          <h3>About this space</h3>
-          <p>This deployment is public. Anyone with the address can access the shared space.</p>
+        <section className={section}>
+          <h3 className={heading}>About this space</h3>
+          <p className={note}>
+            This deployment is public. Anyone with the address can access the shared space.
+          </p>
         </section>
-        <section className="settings-section">
-          <h3>A few handy shortcuts</h3>
-          <dl className="shortcuts">
-            <div>
+        <section className={section}>
+          <h3 className={heading}>A few handy shortcuts</h3>
+          <dl className="text-[11px]">
+            <div className={shortcut}>
               <dt>Capture a thought</dt>
               <dd>
                 <kbd>Enter</kbd>
               </dd>
             </div>
-            <div>
+            <div className={shortcut}>
               <dt>A new line</dt>
               <dd>
                 <kbd>Shift Enter</kbd>
               </dd>
             </div>
-            <div>
+            <div className={shortcut}>
               <dt>Search your space</dt>
               <dd>
                 <kbd>Ctrl / ⌘ K</kbd>
               </dd>
             </div>
-            <div>
+            <div className={shortcut}>
               <dt>File as you type</dt>
               <dd>
                 <code>!buy</code> <code>#weekend</code>
