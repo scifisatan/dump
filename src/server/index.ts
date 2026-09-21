@@ -33,7 +33,8 @@ const routes = app
     return stub.fetch(new Request('https://dump.internal/sync', c.req.raw));
   })
   .get('/api/events', async (c) => {
-    if (c.req.header('Upgrade')?.toLowerCase() !== 'websocket') return c.text('WebSocket required', 426);
+    if (c.req.header('Upgrade')?.toLowerCase() !== 'websocket')
+      return c.text('WebSocket required', 426);
     const stub = c.env.DUMP.get(c.env.DUMP.idFromName('me'));
     return stub.fetch(new Request('https://dump.internal/events', c.req.raw));
   });

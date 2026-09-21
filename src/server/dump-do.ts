@@ -9,8 +9,13 @@ export class DumpDO extends Agent<Env> {
   private store = newStore();
   private persistenceError: unknown;
   private persister = createDurableObjectSqlStoragePersister(
-    this.store, this.ctx.storage.sql, { mode: 'fragmented', storagePrefix: 'dump_' },
-    undefined, (error) => { this.persistenceError = error; },
+    this.store,
+    this.ctx.storage.sql,
+    { mode: 'fragmented', storagePrefix: 'dump_' },
+    undefined,
+    (error) => {
+      this.persistenceError = error;
+    },
   );
 
   async onStart() {
@@ -26,9 +31,14 @@ export class DumpDO extends Agent<Env> {
   async onRequest(request: Request): Promise<Response> {
     const path = new URL(request.url).pathname;
     if (path === '/ping') {
-      return Response.json({ ok: true, items: this.store.getRowCount('dumps'), version: SCHEMA_VERSION });
+      return Response.json({
+        ok: true,
+        items: this.store.getRowCount('dumps'),
+        version: SCHEMA_VERSION,
+      });
     }
-    if (path !== '/sync' || request.method !== 'POST') return new Response('Not found', { status: 404 });
+    if (path !== '/sync' || request.method !== 'POST')
+      return new Response('Not found', { status: 404 });
     if (!request.headers.get('Content-Type')?.includes('application/json')) {
       return Response.json({ error: 'JSON required.' }, { status: 415 });
     }
@@ -43,7 +53,10 @@ export class DumpDO extends Agent<Env> {
       size += value.byteLength;
       if (size > MAX_SYNC_BYTES) {
         await reader.cancel();
-        return Response.json({ error: 'Sync size limit reached. Export your data before continuing.' }, { status: 413 });
+        return Response.json(
+          { error: 'Sync size limit reached. Export your data before continuing.' },
+          { status: 413 },
+        );
       }
       chunks.push(value);
     }
@@ -51,7 +64,10 @@ export class DumpDO extends Agent<Env> {
     try {
       const bytes = new Uint8Array(size);
       let offset = 0;
-      for (const chunk of chunks) { bytes.set(chunk, offset); offset += chunk.length; }
+      for (const chunk of chunks) {
+        bytes.set(chunk, offset);
+        offset += chunk.length;
+      }
       content = validateContent(JSON.parse(new TextDecoder().decode(bytes)));
     } catch {
       return Response.json({ error: 'Invalid or incompatible sync data.' }, { status: 400 });
@@ -65,9 +81,12 @@ export class DumpDO extends Agent<Env> {
       if (this.persistenceError) throw new Error('Could not save dumps.');
       // Only acknowledge and notify peers after persistence completes.
       if (changed) this.broadcast(JSON.stringify({ type: 'changed' }));
-      return Response.json({ version: SCHEMA_VERSION, content: this.store.getMergeableContent() }, {
-        headers: { 'Cache-Control': 'no-store' },
-      });
+      return Response.json(
+        { version: SCHEMA_VERSION, content: this.store.getMergeableContent() },
+        {
+          headers: { 'Cache-Control': 'no-store' },
+        },
+      );
     });
   }
 }

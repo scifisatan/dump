@@ -8,12 +8,18 @@ const cell = z.tuple([z.string().max(130_000), timestamp, hash]);
 const row = z.tuple([z.object({ data: cell }).strict(), timestamp, hash]);
 const table = z.tuple([z.record(z.uuid(), row), timestamp, hash]);
 const listTable = z.tuple([z.record(listSchema, row), timestamp, hash]);
-const tables = z.tuple([z.object({ dumps: table.optional(), lists: listTable.optional() }).strict(), timestamp, hash]);
+const tables = z.tuple([
+  z.object({ dumps: table.optional(), lists: listTable.optional() }).strict(),
+  timestamp,
+  hash,
+]);
 const values = z.tuple([z.object({}).strict(), timestamp, hash]);
-export const syncSchema = z.object({
-  version: z.union([z.literal(1), z.literal(SCHEMA_VERSION)]),
-  content: z.tuple([tables, values]),
-}).strict();
+export const syncSchema = z
+  .object({
+    version: z.union([z.literal(1), z.literal(SCHEMA_VERSION)]),
+    content: z.tuple([tables, values]),
+  })
+  .strict();
 
 export const newStore = () => createMergeableStore().setTablesSchema(storeSchema);
 

@@ -1,16 +1,23 @@
 import { expect, test } from '@playwright/test';
 import { newStore } from '../../src/shared/merge';
 
-test('two devices merge offline captures, persist through reload, and honor deletion', async ({ browser }) => {
+test('two devices merge offline captures, persist through reload, and honor deletion', async ({
+  browser,
+}) => {
   const phone = await browser.newContext({ viewport: { width: 390, height: 844 } });
   const desktop = await browser.newContext();
-  const a = await phone.newPage(); const b = await desktop.newPage();
+  const a = await phone.newPage();
+  const b = await desktop.newPage();
   const suffix = crypto.randomUUID().slice(0, 8);
-  const first = `offline thought ${suffix}`; const second = `desktop thought ${suffix}`;
-  await a.goto('/'); await b.goto('/');
+  const first = `offline thought ${suffix}`;
+  const second = `desktop thought ${suffix}`;
+  await a.goto('/');
+  await b.goto('/');
   await expect(a.getByRole('textbox', { name: 'Capture a thought' })).toBeEnabled();
   await expect(b.getByRole('textbox', { name: 'Capture a thought' })).toBeEnabled();
-  await a.evaluate(async () => { await navigator.serviceWorker.ready; });
+  await a.evaluate(async () => {
+    await navigator.serviceWorker.ready;
+  });
   await a.reload();
   await expect(a.getByRole('textbox', { name: 'Capture a thought' })).toBeEnabled();
   await phone.setOffline(true);
@@ -23,7 +30,9 @@ test('two devices merge offline captures, persist through reload, and honor dele
   await b.getByRole('textbox', { name: 'Capture a thought' }).fill(second);
   await b.getByRole('button', { name: 'Save dump', exact: true }).click();
   await phone.setOffline(false);
-  await expect(b.getByRole('article').getByText(first, { exact: true })).toBeVisible({ timeout: 20_000 });
+  await expect(b.getByRole('article').getByText(first, { exact: true })).toBeVisible({
+    timeout: 20_000,
+  });
   await expect(a.getByRole('article').getByText(second, { exact: true })).toBeVisible();
   await expect(b.getByRole('article').getByText(first, { exact: true })).toHaveCount(1);
   await phone.setOffline(true);
@@ -32,7 +41,8 @@ test('two devices merge offline captures, persist through reload, and honor dele
   await expect(b.getByRole('article').getByText(first, { exact: true })).toHaveCount(0);
   await phone.setOffline(false);
   await expect(a.getByRole('article').getByText(first, { exact: true })).toHaveCount(0);
-  await phone.close(); await desktop.close();
+  await phone.close();
+  await desktop.close();
 });
 
 test('prefix filing, search, export and additive restore work', async ({ page }) => {
@@ -56,51 +66,87 @@ test('prefix filing, search, export and additive restore work', async ({ page })
   await expect(page.getByText('0 dumps restored. Existing items were kept.')).toBeVisible();
 });
 
-test('HTTP sync works with WebSockets blocked and rejects invalid requests', async ({ browser, request }) => {
-  const aContext = await browser.newContext(); const bContext = await browser.newContext();
-  for (const context of [aContext, bContext]) await context.routeWebSocket('**/api/events', (ws) => ws.close());
-  const a = await aContext.newPage(); const b = await bContext.newPage();
-  await a.goto('/'); await b.goto('/');
+test('HTTP sync works with WebSockets blocked and rejects invalid requests', async ({
+  browser,
+  request,
+}) => {
+  const aContext = await browser.newContext();
+  const bContext = await browser.newContext();
+  for (const context of [aContext, bContext])
+    await context.routeWebSocket('**/api/events', (ws) => ws.close());
+  const a = await aContext.newPage();
+  const b = await bContext.newPage();
+  await a.goto('/');
+  await b.goto('/');
   const text = `HTTP fallback ${crypto.randomUUID().slice(0, 8)}`;
   await a.getByRole('textbox', { name: 'Capture a thought' }).fill(text);
   await a.getByRole('button', { name: 'Save dump', exact: true }).click();
-  await expect(b.getByRole('article').getByText(text, { exact: true })).toBeVisible({ timeout: 22_000 });
-  const rejected = await request.post('/api/sync', { headers: { Origin: 'https://evil.example' }, data: {} });
+  await expect(b.getByRole('article').getByText(text, { exact: true })).toBeVisible({
+    timeout: 22_000,
+  });
+  const rejected = await request.post('/api/sync', {
+    headers: { Origin: 'https://evil.example' },
+    data: {},
+  });
   expect(rejected.status()).toBe(403);
-  const malformed = await request.post('/api/sync', { headers: { Origin: 'http://127.0.0.1:6192' }, data: { version: 999, content: [] } });
+  const malformed = await request.post('/api/sync', {
+    headers: { Origin: 'http://127.0.0.1:6192' },
+    data: { version: 999, content: [] },
+  });
   expect(malformed.status()).toBe(400);
-  const good = await request.post('/api/sync', { headers: { Origin: 'http://127.0.0.1:6192' }, data: { version: 1, content: newStore().getMergeableContent() } });
+  const good = await request.post('/api/sync', {
+    headers: { Origin: 'http://127.0.0.1:6192' },
+    data: { version: 1, content: newStore().getMergeableContent() },
+  });
   expect(good.status()).toBe(200);
-  await aContext.close(); await bContext.close();
+  await aContext.close();
+  await bContext.close();
 });
 
 test('mobile layout fits and navigation is usable', async ({ browser }) => {
-  const context = await browser.newContext({ viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true });
+  const context = await browser.newContext({
+    viewport: { width: 390, height: 844 },
+    isMobile: true,
+    hasTouch: true,
+  });
   const page = await context.newPage();
   await page.goto('/');
   await expect(page.getByRole('textbox', { name: 'Capture a thought' })).toBeVisible();
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
   await page.getByRole('button', { name: 'Open navigation' }).click();
-  await page.getByRole('navigation').getByRole('link', { name: /^Ideas/ }).click();
+  await page
+    .getByRole('navigation')
+    .getByRole('link', { name: /^Ideas/ })
+    .click();
   await expect(page.getByRole('heading', { level: 1 })).toContainText('Ideas');
   await context.close();
 });
 
-test('custom lists, filing, renaming and board order sync and survive reload', async ({ browser }) => {
+test('custom lists, filing, renaming and board order sync and survive reload', async ({
+  browser,
+}) => {
   const aContext = await browser.newContext({ viewport: { width: 1440, height: 1000 } });
   const bContext = await browser.newContext();
-  const a = await aContext.newPage(); const b = await bContext.newPage();
+  const a = await aContext.newPage();
+  const b = await bContext.newPage();
   const name = `Books-${crypto.randomUUID().slice(0, 6)}`;
   const thought = `Read something slow ${name}`;
-  await a.goto('/'); await b.goto('/board');
+  await a.goto('/');
+  await b.goto('/board');
   await a.getByRole('button', { name: 'Create new list' }).click();
   await a.getByRole('textbox', { name: 'List name' }).fill(name);
   await a.getByRole('button', { name: 'Create list', exact: true }).click();
   await expect(a.getByRole('heading', { level: 1 })).toHaveText(new RegExp(name));
-  await a.getByRole('textbox', { name: 'Capture a thought' }).fill(`!${name.toLowerCase()} ${thought}`);
+  await a
+    .getByRole('textbox', { name: 'Capture a thought' })
+    .fill(`!${name.toLowerCase()} ${thought}`);
   await a.getByRole('button', { name: 'Save dump', exact: true }).click();
   await expect(a.getByRole('article').getByText(thought, { exact: true })).toBeVisible();
-  await expect(b.getByRole('region', { name: `${name} column`, exact: true }).getByText(thought, { exact: true })).toBeVisible({ timeout: 20_000 });
+  await expect(
+    b
+      .getByRole('region', { name: `${name} column`, exact: true })
+      .getByText(thought, { exact: true }),
+  ).toBeVisible({ timeout: 20_000 });
   await a.getByRole('button', { name: 'Edit list', exact: true }).click();
   await a.getByRole('textbox', { name: 'List name' }).fill(`${name} shelf`);
   await a.getByRole('button', { name: 'Save changes', exact: true }).click();
@@ -112,13 +158,15 @@ test('custom lists, filing, renaming and board order sync and survive reload', a
   await a.getByRole('menuitem', { name: 'Move left', exact: true }).click();
   const expected = [...oldOrder];
   const previousIndex = expected.indexOf(`${name} shelf`);
-  expected.splice(previousIndex, 1); expected.splice(previousIndex - 1, 0, `${name} shelf`);
+  expected.splice(previousIndex, 1);
+  expected.splice(previousIndex - 1, 0, `${name} shelf`);
   await expect(a.locator('.board-column h2')).toHaveText(expected);
   await expect(b.locator('.board-column h2')).toHaveText(expected);
   await a.reload();
   await expect(a.locator('.board-column h2')).toHaveText(expected);
   await a.screenshot({ path: 'test-results/board-desktop.png', fullPage: true });
-  await aContext.close(); await bContext.close();
+  await aContext.close();
+  await bContext.close();
 });
 
 test('dialogs center, restore focus, and theme preference survives reload', async ({ page }) => {
@@ -130,7 +178,10 @@ test('dialogs center, restore focus, and theme preference survives reload', asyn
   await expect(page.getByRole('combobox', { name: 'Search dumps' })).toBeFocused();
   const centered = await dialog.evaluate((element) => {
     const rect = element.getBoundingClientRect();
-    return Math.abs(rect.x + rect.width / 2 - innerWidth / 2) < 2 && Math.abs(rect.y + rect.height / 2 - innerHeight / 2) < 2;
+    return (
+      Math.abs(rect.x + rect.width / 2 - innerWidth / 2) < 2 &&
+      Math.abs(rect.y + rect.height / 2 - innerHeight / 2) < 2
+    );
   });
   expect(centered).toBe(true);
   await page.keyboard.press('Escape');
@@ -146,7 +197,12 @@ test('dialogs center, restore focus, and theme preference survives reload', asyn
 });
 
 test('mobile board, sheet focus, reduced motion, and dialog fit', async ({ browser }) => {
-  const context = await browser.newContext({ viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true, reducedMotion: 'reduce' });
+  const context = await browser.newContext({
+    viewport: { width: 390, height: 844 },
+    isMobile: true,
+    hasTouch: true,
+    reducedMotion: 'reduce',
+  });
   const page = await context.newPage();
   await page.goto('/board');
   await expect(page.getByRole('heading', { name: /Your board/ })).toBeVisible();
@@ -169,14 +225,21 @@ test('mobile board, sheet focus, reduced motion, and dialog fit', async ({ brows
   await context.close();
 });
 
-test('marketing is separate from notebook initialization and preserves the original logo', async ({ browser }) => {
+test('marketing is separate from notebook initialization and preserves the original logo', async ({
+  browser,
+}) => {
   const context = await browser.newContext({ viewport: { width: 1440, height: 1000 } });
   const page = await context.newPage();
   const apiRequests: string[] = [];
-  page.on('request', (request) => { if (new URL(request.url()).pathname.startsWith('/api/')) apiRequests.push(request.url()); });
+  page.on('request', (request) => {
+    if (new URL(request.url()).pathname.startsWith('/api/')) apiRequests.push(request.url());
+  });
   await page.goto('/marketing');
   await expect(page.getByRole('heading', { level: 1 })).toContainText('Your mind is for ideas.');
-  await expect(page.locator('.brand-mark').first()).toHaveCSS('background-color', 'rgb(216, 238, 121)');
+  await expect(page.locator('.brand-mark').first()).toHaveCSS(
+    'background-color',
+    'rgb(216, 238, 121)',
+  );
   expect(await page.evaluate(() => indexedDB.databases())).toEqual([]);
   expect(apiRequests).toEqual([]);
   await page.screenshot({ path: 'test-results/marketing-desktop.png', fullPage: true });

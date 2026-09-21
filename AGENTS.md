@@ -26,7 +26,8 @@ Client and Worker compile separately (`tsconfig.client.json`, `tsconfig.json`). 
 
 ## Commands
 `npm run dev` — client, Worker, DO at http://127.0.0.1:6191.
-`npm run check` — domain/merge tests, type checks, production build.
+`npm run check` — format check, lint, domain/merge tests, type checks, production build.
+`npm run format` — format the repo with oxfmt (config in `.oxfmtrc.json`).
 `npm run lint` — Oxlint plus React Doctor's per-file React diagnostics.
 `npm run test:e2e` — local test build on port 6192, isolated `.wrangler/test-state` storage.
 `npm run deploy` — check, build production, and deploy to the configured custom domain.

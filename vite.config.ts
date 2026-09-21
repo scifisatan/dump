@@ -10,7 +10,10 @@ export default defineConfig(({ mode }) => ({
   plugins: [
     react(),
     tailwindcss(),
-    cloudflare({ persistState: { path: mode === 'test' ? '.wrangler/test-state' : '.wrangler/state' }, inspectorPort: false }),
+    cloudflare({
+      persistState: { path: mode === 'test' ? '.wrangler/test-state' : '.wrangler/state' },
+      inspectorPort: false,
+    }),
     VitePWA({
       registerType: 'prompt',
       includeAssets: ['favicon.svg', 'icon-192.png', 'icon-512.png'],
