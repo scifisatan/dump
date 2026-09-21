@@ -1,51 +1,47 @@
-import { createMergeableStore, type MergeableContent, type MergeableStore } from 'tinybase';
-import { z } from 'zod';
-import { decodeCollection, decodeDump, listSchema, SCHEMA_VERSION, storeSchema } from './schema';
+import { createMergeableStore, type MergeableStore } from 'tinybase';
+import {
+  DEFAULT_LISTS,
+  decodeCollection,
+  decodeDump,
+  type Collection,
+  type Dump,
+  storeSchema,
+} from './schema';
 
-const timestamp = z.string().max(64);
-const hash = z.number().int().nonnegative().max(0xffffffff);
-const cell = z.tuple([z.string().max(130_000), timestamp, hash]);
-const row = z.tuple([z.object({ data: cell }).strict(), timestamp, hash]);
-const table = z.tuple([z.record(z.uuid(), row), timestamp, hash]);
-const listTable = z.tuple([z.record(listSchema, row), timestamp, hash]);
-const tables = z.tuple([
-  z.object({ dumps: table.optional(), lists: listTable.optional() }).strict(),
-  timestamp,
-  hash,
-]);
-const values = z.tuple([z.object({}).strict(), timestamp, hash]);
-export const syncSchema = z
-  .object({
-    version: z.union([z.literal(1), z.literal(SCHEMA_VERSION)]),
-    content: z.tuple([tables, values]),
-  })
-  .strict();
-
+// The table schema only admits a string `data` cell per row; TinyBase drops anything else.
+// Tombstones are ordinary records with deleted=true; we never delRow().
 export const newStore = () => createMergeableStore().setTablesSchema(storeSchema);
 
-// Validate the transport and every record before touching the authoritative store.
-// Tombstones are ordinary records with deleted=true; we never delRow().
-export function validateContent(input: unknown): MergeableContent {
-  const { content } = syncSchema.parse(input);
-  const rows = content[0][0].dumps?.[0] ?? {};
-  if (Object.keys(rows).length > 50_000) throw new Error('Too many items.');
-  for (const [id, value] of Object.entries(rows)) {
-    const dump = decodeDump(value[0].data[0]);
-    if (dump.id !== id) throw new Error('Record ID mismatch.');
+// Sync runs over TinyBase's WebSocket synchronizer, which relays peers' rows without
+// inspecting them. Every device decodes rows when reading and skips any it cannot trust.
+export function readRows(store: MergeableStore) {
+  const dumps: Dump[] = [];
+  for (const [id, row] of Object.entries(store.getTable('dumps'))) {
+    const dump = tryDecode(() => decodeDump(row.data));
+    if (dump?.id === id) dumps.push(dump);
   }
-  const lists = content[0][0].lists?.[0] ?? {};
-  if (Object.keys(lists).length > 500) throw new Error('Too many lists.');
-  for (const [id, value] of Object.entries(lists)) {
-    if (decodeCollection(value[0].data[0]).id !== id) throw new Error('List ID mismatch.');
+  dumps.sort((a, b) => b.created_at - a.created_at || a.id.localeCompare(b.id));
+  const lists = new Map(DEFAULT_LISTS.map((list) => [list.id, list]));
+  for (const [id, row] of Object.entries(store.getTable('lists'))) {
+    const list = tryDecode(() => decodeCollection(row.data));
+    if (list?.id === id) lists.set(id, list);
   }
-  // SAFETY: Zod validates TinyBase's complete nested tuple representation above;
-  // its timestamp string brand is not expressible in Zod's inferred output.
-  return content as MergeableContent;
+  return {
+    dumps,
+    lists: [...lists.values()].sort(
+      (a: Collection, b: Collection) => a.position - b.position || a.id.localeCompare(b.id),
+    ),
+  };
 }
 
-export function mergeContent(store: MergeableStore, content: MergeableContent) {
-  const peer = newStore().setMergeableContent(content);
-  store.merge(peer);
+function tryDecode<T>(decode: () => T): T | undefined {
+  try {
+    return decode();
+  } catch {
+    return undefined;
+  }
 }
 
-export const MAX_SYNC_BYTES = 4 * 1024 * 1024;
+// Large first syncs are split into fragments and given time to arrive on slow connections.
+export const SYNC_FRAGMENT_BYTES = 256 * 1024;
+export const SYNC_TIMEOUT_SECONDS = 10;

@@ -3,8 +3,6 @@ import { z } from 'zod';
 
 export const pingSchema = z.object({
   ok: z.boolean(),
-  items: z.number(),
-  version: z.number(),
   mode: z.enum(['local', 'cloud']),
 });
 export type PingResult = z.infer<typeof pingSchema>;

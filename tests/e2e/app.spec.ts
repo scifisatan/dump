@@ -1,5 +1,4 @@
 import { expect, test } from '@playwright/test';
-import { newStore } from '../../src/shared/merge';
 
 test('two devices merge offline captures, persist through reload, and honor deletion', async ({
   browser,
@@ -66,39 +65,23 @@ test('prefix filing, search, export and additive restore work', async ({ page })
   await expect(page.getByText('0 dumps restored. Existing items were kept.')).toBeVisible();
 });
 
-test('HTTP sync works with WebSockets blocked and rejects invalid requests', async ({
-  browser,
-  request,
-}) => {
+test('live sync reaches an open device without polling', async ({ browser, request }) => {
   const aContext = await browser.newContext();
   const bContext = await browser.newContext();
-  for (const context of [aContext, bContext])
-    await context.routeWebSocket('**/api/events', (ws) => ws.close());
   const a = await aContext.newPage();
   const b = await bContext.newPage();
   await a.goto('/');
   await b.goto('/');
-  const text = `HTTP fallback ${crypto.randomUUID().slice(0, 8)}`;
+  await expect(b.getByRole('status')).toContainText('Saved · local development');
+  const text = `Live sync ${crypto.randomUUID().slice(0, 8)}`;
   await a.getByRole('textbox', { name: 'Capture a thought' }).fill(text);
   await a.getByRole('button', { name: 'Save dump', exact: true }).click();
+  // No polling: the edit arrives over the open WebSocket.
   await expect(b.getByRole('article').getByText(text, { exact: true })).toBeVisible({
-    timeout: 22_000,
+    timeout: 5_000,
   });
-  const rejected = await request.post('/api/sync', {
-    headers: { Origin: 'https://evil.example' },
-    data: {},
-  });
-  expect(rejected.status()).toBe(403);
-  const malformed = await request.post('/api/sync', {
-    headers: { Origin: 'http://127.0.0.1:6192' },
-    data: { version: 999, content: [] },
-  });
-  expect(malformed.status()).toBe(400);
-  const good = await request.post('/api/sync', {
-    headers: { Origin: 'http://127.0.0.1:6192' },
-    data: { version: 1, content: newStore().getMergeableContent() },
-  });
-  expect(good.status()).toBe(200);
+  // Plain requests are refused; only WebSocket upgrades reach the sync server.
+  expect((await request.get('/api/sync')).status()).toBe(426);
   await aContext.close();
   await bContext.close();
 });

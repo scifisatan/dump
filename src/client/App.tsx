@@ -22,15 +22,7 @@ import { format } from 'date-fns';
 import { toast } from 'sonner';
 import { Link, NavLink, useLocation, useNavigate, useMatch } from 'react-router-dom';
 import type { Collection, Dump } from '../shared/schema';
-import {
-  capture,
-  exportDumps,
-  initializeStore,
-  restoreAction,
-  syncNow,
-  updateDump,
-  useDumpStore,
-} from './store';
+import { capture, exportDumps, initializeStore, syncNow, updateDump, useDumpStore } from './store';
 import { cn } from './lib/utils';
 import { Brand } from './components/Brand';
 import { DumpCard, type DumpActions } from './components/DumpCard';
@@ -63,8 +55,6 @@ const emptyState =
 const emptyNote =
   'mt-2.25 text-[12px] leading-[1.8] text-muted-foreground max-phone:mx-auto max-phone:max-w-63.75 max-phone:text-[11px]';
 
-type UndoAction = { previous: Dump; changes: Parameters<typeof updateDump>[1] };
-
 export default function App() {
   const state = useDumpStore();
   const navigate = useNavigate();
@@ -78,7 +68,6 @@ export default function App() {
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [triage, setTriage] = useState(false);
   const [editor, setEditor] = useState<{ list?: Collection } | null>(null);
-  const [lastAction, setLastAction] = useState<UndoAction | null>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const lists = state.lists.filter((list) => !list.deleted);
   const active = state.dumps.filter((dump) => !dump.deleted);
@@ -129,24 +118,8 @@ export default function App() {
   }, []);
 
   function act(dump: Dump, changes: Parameters<typeof updateDump>[1], label: string) {
-    const action = { previous: updateDump(dump.id, changes), changes };
-    setLastAction(action);
-    toast(label, {
-      action: {
-        label: 'Undo',
-        onClick: () => {
-          restoreAction(action.previous, action.changes);
-          setLastAction(null);
-        },
-      },
-    });
-  }
-  function undo() {
-    if (lastAction) {
-      restoreAction(lastAction.previous, lastAction.changes);
-      setLastAction(null);
-      toast('Undone');
-    }
+    updateDump(dump.id, changes);
+    toast(label);
   }
   const actions: DumpActions = {
     complete: (dump) =>
@@ -605,8 +578,6 @@ export default function App() {
           lists={lists}
           actions={actions}
           close={() => setTriage(false)}
-          undo={undo}
-          canUndo={!!lastAction}
         />
       )}
     </div>

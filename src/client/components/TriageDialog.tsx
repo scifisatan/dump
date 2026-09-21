@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Asterisk, ChevronRight, RotateCcw, Trash2 } from 'lucide-react';
+import { Asterisk, ChevronRight, Trash2 } from 'lucide-react';
 import { LISTS, type Collection, type Dump } from '../../shared/schema';
 import type { DumpActions } from './DumpCard';
 import { ListDot } from './ListDot';
@@ -11,15 +11,11 @@ export function TriageDialog({
   lists,
   actions,
   close,
-  undo,
-  canUndo,
 }: {
   dumps: Dump[];
   lists: Collection[];
   actions: DumpActions;
   close: () => void;
-  undo: () => void;
-  canUndo: boolean;
 }) {
   const [index, setIndex] = useState(0);
   const current = dumps.length ? dumps[index % dumps.length] : undefined;
@@ -33,10 +29,6 @@ export function TriageDialog({
         event.target instanceof HTMLTextAreaElement
       )
         return;
-      if (event.key.toLowerCase() === 'u') {
-        event.preventDefault();
-        undo();
-      }
       if (!current) return;
       const list = LISTS.find((list) => list.shortcut === event.key.toLowerCase());
       if (list && lists.some((item) => item.id === list.id)) {
@@ -54,7 +46,7 @@ export function TriageDialog({
     }
     document.addEventListener('keydown', shortcuts);
     return () => document.removeEventListener('keydown', shortcuts);
-  }, [current, lists, actions, undo]);
+  }, [current, lists, actions]);
   return (
     <Dialog
       open
@@ -90,10 +82,6 @@ export function TriageDialog({
               ))}
             </div>
             <div className="flex justify-between gap-1 border-t pt-3.75 *:text-[11px]">
-              <Button variant="ghost" disabled={!canUndo} onClick={undo}>
-                <RotateCcw />
-                Undo
-              </Button>
               <Button variant="ghost" onClick={() => actions.remove(current)}>
                 <Trash2 />
                 Remove
@@ -108,9 +96,6 @@ export function TriageDialog({
           <div className="grid justify-items-center gap-4.5 p-5 text-accent-foreground">
             <Asterisk size={48} />
             <Button onClick={close}>Back to my space</Button>
-            <Button variant="ghost" disabled={!canUndo} onClick={undo}>
-              Undo last action
-            </Button>
           </div>
         )}
       </DialogContent>

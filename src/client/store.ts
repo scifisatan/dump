@@ -1,21 +1,24 @@
 import { useSyncExternalStore } from 'react';
 import { createIndexedDbPersister } from 'tinybase/persisters/persister-indexed-db';
+import { createBroadcastChannelSynchronizer } from 'tinybase/synchronizers/synchronizer-broadcast-channel';
+import {
+  createWsSynchronizer,
+  type WsSynchronizer,
+} from 'tinybase/synchronizers/synchronizer-ws-client';
 import { hc } from 'hono/client';
 import type { Api } from '../shared/api';
 import {
   collectionSchema,
   DEFAULT_LISTS,
-  decodeCollection,
   encodeCollection,
   decodeDump,
   encodeDump,
   exportSchema,
   makeDump,
-  SCHEMA_VERSION,
   type Collection,
   type Dump,
 } from '../shared/schema';
-import { MAX_SYNC_BYTES, mergeContent, newStore, validateContent } from '../shared/merge';
+import { newStore, readRows, SYNC_FRAGMENT_BYTES, SYNC_TIMEOUT_SECONDS } from '../shared/merge';
 
 export const store = newStore();
 type SyncState = 'connecting' | 'syncing' | 'synced' | 'offline' | 'error';
@@ -64,29 +67,13 @@ export const persister = createIndexedDbPersister(store, 'dump-v1', 1, (error) =
   });
 });
 let readyPromise: Promise<void> | undefined;
-let revision = 0;
-let syncing = false;
-let repeatSync = false;
-let merging = false;
-let socket: WebSocket | undefined;
+let synchronizer: WsSynchronizer<WebSocket> | undefined;
+let connecting = false;
 let reconnectTimer: ReturnType<typeof setTimeout> | undefined;
 let retryDelay = 1000;
 const api = hc<Api>('/');
-const tabChannel = typeof BroadcastChannel === 'undefined' ? null : new BroadcastChannel('dump-v1');
 
-function rebuild() {
-  const dumps = Object.values(store.getTable('dumps')).map((row) => decodeDump(row.data));
-  dumps.sort((a, b) => b.created_at - a.created_at || a.id.localeCompare(b.id));
-  const lists = new Map(DEFAULT_LISTS.map((list) => [list.id, list]));
-  for (const row of Object.values(store.getTable('lists'))) {
-    const list = decodeCollection(row.data);
-    lists.set(list.id, list);
-  }
-  emit({
-    dumps,
-    lists: [...lists.values()].sort((a, b) => a.position - b.position || a.id.localeCompare(b.id)),
-  });
-}
+const rebuild = () => emit(readRows(store));
 
 export function initializeStore(): Promise<void> {
   return (readyPromise ??= (async () => {
@@ -110,66 +97,36 @@ export function initializeStore(): Promise<void> {
     await persister.startAutoSave();
     if (persistenceFailure)
       throw new Error('Local storage is unavailable. Enable browser storage and retry.');
-    persister.addStatusListener((_persister, status) => emit({ saving: status === 2 }));
-    store.addDidFinishTransactionListener(() => {
-      rebuild();
-      if (!merging) {
-        revision++;
-        // Capture ends before serialization, messaging, or network work starts.
-        setTimeout(() => {
-          tabChannel?.postMessage({
-            version: SCHEMA_VERSION,
-            content: store.getMergeableContent(),
-          });
-          void syncNow();
-        }, 0);
-      }
+    persister.addStatusListener((_persister, status) => {
+      // TinyBase reports save errors before returning to idle, so a clean save clears the banner.
+      if (status === 2) persistenceFailure = undefined;
+      emit(
+        status === 0 && !persistenceFailure
+          ? { saving: false, storageError: null }
+          : { saving: status === 2 },
+      );
     });
-    if (tabChannel)
-      tabChannel.onmessage = (event) => {
-        try {
-          merging = true;
-          mergeContent(store, validateContent(event.data));
-        } catch {
-          /* Ignore messages from incompatible open tabs. */
-        } finally {
-          merging = false;
-        }
-        void syncNow();
-      };
+    store.addDidFinishTransactionListener(rebuild);
     emit({ ready: true });
-    // Ask existing tabs for their persisted/in-flight merge state, without replacing it.
-    tabChannel?.postMessage({ type: 'hello' });
-    if (tabChannel) {
-      const receive = tabChannel.onmessage;
-      tabChannel.onmessage = (event) => {
-        if (event.data?.type === 'hello')
-          tabChannel.postMessage({ version: SCHEMA_VERSION, content: store.getMergeableContent() });
-        else receive?.call(tabChannel, event);
-      };
-    }
+    // Other open tabs on this device stay in step without a network round trip.
+    if (typeof BroadcastChannel !== 'undefined')
+      void createBroadcastChannelSynchronizer(store, 'dump-tabs').startSync();
     window.addEventListener('online', () => {
       retryDelay = 1000;
-      connectEvents();
       void syncNow();
     });
     window.addEventListener('offline', () => {
-      socket?.close();
-      emit({ sync: 'offline' });
+      disconnect();
+      emit({ sync: 'offline', syncError: null });
     });
     window.addEventListener('pagehide', () => {
       void persister.save();
     });
     document.addEventListener('visibilitychange', () => {
-      if (document.visibilityState === 'visible') {
-        connectEvents();
-        void syncNow();
-      } else void persister.save();
-    });
-    // HTTP polling is the fallback if WebSockets are blocked or unavailable.
-    setInterval(() => {
+      // Mobile browsers drop sockets in the background; reconnect when the app returns.
       if (document.visibilityState === 'visible') void syncNow();
-    }, 15_000);
+      else void persister.save();
+    });
     void api.api.ping
       .$get({})
       .then(async (response) => {
@@ -178,93 +135,72 @@ export function initializeStore(): Promise<void> {
         }
       })
       .catch(() => {});
-    connectEvents();
     void syncNow();
   })());
 }
 
-function connectEvents() {
-  if (!navigator.onLine || (socket && socket.readyState < WebSocket.CLOSING)) return;
+function disconnect() {
   clearTimeout(reconnectTimer);
-  socket = new WebSocket(
-    `${location.protocol === 'https:' ? 'wss:' : 'ws:'}//${location.host}/api/events`,
-  );
-  socket.onopen = () => {
-    retryDelay = 1000;
-  };
-  socket.onmessage = (event) => {
-    try {
-      if (JSON.parse(event.data).type === 'changed') void syncNow();
-    } catch {
-      /* Ignore SDK control messages. */
-    }
-  };
-  socket.onclose = () => {
-    reconnectTimer = setTimeout(connectEvents, retryDelay);
-    retryDelay = Math.min(retryDelay * 2, 30_000);
-  };
+  synchronizer?.destroy();
+  synchronizer = undefined;
 }
 
+// Connect TinyBase's WebSocket synchronizer if it is not already running. On connect it
+// compares hashes with the server and exchanges only differing rows; afterwards every local
+// change is sent as it happens, and changes from other devices arrive live.
 export async function syncNow() {
-  if (!snapshot.ready) return;
+  if (!snapshot.ready || synchronizer || connecting) return;
   if (!navigator.onLine) {
-    emit({ sync: 'offline' });
+    emit({ sync: 'offline', syncError: null });
     return;
   }
-  if (syncing) {
-    repeatSync = true;
-    return;
-  }
-  syncing = true;
-  const sentRevision = revision;
+  clearTimeout(reconnectTimer);
+  connecting = true;
   emit({ sync: 'syncing', syncError: null });
   try {
-    const body = JSON.stringify({ version: SCHEMA_VERSION, content: store.getMergeableContent() });
-    if (new Blob([body]).size > MAX_SYNC_BYTES)
-      throw new Error('Sync size limit reached. Export your data for safekeeping.');
-    const response = await fetch('/api/sync', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body,
-      redirect: 'error',
-      signal: AbortSignal.timeout(12_000),
+    const socket = new WebSocket(
+      `${location.protocol === 'https:' ? 'wss:' : 'ws:'}//${location.host}/api/sync`,
+    );
+    const connected = await createWsSynchronizer(
+      store,
+      socket,
+      SYNC_TIMEOUT_SECONDS,
+      undefined,
+      undefined,
+      undefined,
+      SYNC_FRAGMENT_BYTES,
+    );
+    socket.addEventListener('close', () => {
+      if (synchronizer !== connected) return;
+      connected.destroy();
+      synchronizer = undefined;
+      if (!navigator.onLine) {
+        emit({ sync: 'offline', syncError: null });
+        return;
+      }
+      emit({ sync: 'error', syncError: 'Sync disconnected. It will reconnect automatically.' });
+      scheduleReconnect();
     });
-    if (!response.ok)
-      throw new Error(
-        response.status === 413
-          ? 'Sync size limit reached. Export your data for safekeeping.'
-          : 'Sync is unavailable. Your changes will retry automatically.',
-      );
-    if (!response.headers.get('content-type')?.includes('application/json'))
-      throw new Error(
-        'Sync returned an unexpected response. Your changes will retry automatically.',
-      );
-    const content = validateContent(await response.json());
-    merging = true;
-    try {
-      mergeContent(store, content);
-    } finally {
-      merging = false;
-    }
-    // Incoming server state must also be locally durable before reporting success.
-    persistenceFailure = undefined;
-    await persister.save();
-    if (persistenceFailure) throw new Error('Could not save the latest changes on this device.');
-    emit({ sync: sentRevision === revision ? 'synced' : 'syncing' });
-  } catch (error) {
+    synchronizer = connected;
+    await connected.startSync();
+    retryDelay = 1000;
+    if (synchronizer === connected) emit({ sync: 'synced' });
+  } catch {
+    disconnect();
     emit({
       sync: navigator.onLine ? 'error' : 'offline',
-      syncError: error instanceof Error ? error.message : 'Sync will retry automatically.',
+      syncError: navigator.onLine ? 'Sync is unavailable. It will retry automatically.' : null,
     });
+    scheduleReconnect();
   } finally {
-    syncing = false;
-    const retry = repeatSync || sentRevision !== revision;
-    repeatSync = false;
-    if (retry)
-      setTimeout(() => {
-        void syncNow();
-      }, 150);
+    connecting = false;
   }
+}
+
+function scheduleReconnect() {
+  clearTimeout(reconnectTimer);
+  reconnectTimer = setTimeout(() => void syncNow(), retryDelay);
+  retryDelay = Math.min(retryDelay * 2, 30_000);
 }
 
 export function capture(raw: string) {
@@ -285,17 +221,6 @@ export function updateDump(
     'data',
     encodeDump({ ...previous, ...changes, updated_at: Date.now() }),
   );
-  return previous;
-}
-
-export function restoreAction(previous: Dump, changes: Parameters<typeof updateDump>[1]) {
-  // Undo only fields changed by this action, preserving subsequent unrelated edits.
-  const restore: Parameters<typeof updateDump>[1] = {};
-  if ('list' in changes) restore.list = previous.list;
-  if ('done' in changes) restore.done = previous.done;
-  if ('deleted' in changes) restore.deleted = previous.deleted;
-  if ('classified_by' in changes) restore.classified_by = previous.classified_by;
-  updateDump(previous.id, restore);
 }
 
 export function saveList(label: string, color: string, id?: string) {
@@ -344,7 +269,6 @@ export function exportDumps() {
       JSON.stringify(
         {
           app: 'dump',
-          version: SCHEMA_VERSION,
           exported_at: new Date().toISOString(),
           dumps: snapshot.dumps,
           lists: snapshot.lists,
@@ -370,7 +294,7 @@ export function importDumps(input: unknown): number {
   const backup = exportSchema.parse(input);
   let added = 0;
   store.transaction(() => {
-    for (const list of backup.lists ?? []) {
+    for (const list of backup.lists) {
       if (!store.hasRow('lists', list.id))
         store.setRow('lists', list.id, { data: encodeCollection(list) });
     }

@@ -10,7 +10,6 @@ export const LISTS = [
 
 export const listSchema = z.string().regex(/^[a-z0-9][a-z0-9-]{0,63}$/);
 export type ListId = z.infer<typeof listSchema>;
-export const SCHEMA_VERSION = 2;
 
 export const collectionSchema = z
   .object({
@@ -65,10 +64,9 @@ export const decodeDump = (data: unknown): Dump =>
 
 export const exportSchema = z.object({
   app: z.literal('dump'),
-  version: z.union([z.literal(1), z.literal(SCHEMA_VERSION)]),
   exported_at: z.string(),
   dumps: z.array(dumpSchema).max(50_000),
-  lists: z.array(collectionSchema).max(500).optional(),
+  lists: z.array(collectionSchema).max(500),
 });
 
 export function makeDump(

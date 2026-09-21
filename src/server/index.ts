@@ -20,23 +20,17 @@ app.use('*', async (c, next) => {
 });
 
 const routes = app
-  .get('/api/ping', async (c) => {
-    const stub = c.env.DUMP.get(c.env.DUMP.idFromName('me'));
-    const response = await stub.fetch(new Request('https://dump.internal/ping'));
-    const result = await response.json<{ ok: boolean; items: number; version: number }>();
+  .get('/api/ping', (c) => {
     const hostname = new URL(c.req.url).hostname;
     const mode = ['localhost', '127.0.0.1', '[::1]'].includes(hostname) ? 'local' : 'cloud';
-    return c.json(pingSchema.parse({ ...result, mode }));
+    return c.json(pingSchema.parse({ ok: true, mode }));
   })
-  .post('/api/sync', async (c) => {
-    const stub = c.env.DUMP.get(c.env.DUMP.idFromName('me'));
-    return stub.fetch(new Request('https://dump.internal/sync', c.req.raw));
-  })
-  .get('/api/events', async (c) => {
+  // TinyBase WebSocket sync. Browsers send Origin on upgrades, so the check above applies.
+  .get('/api/sync', async (c) => {
     if (c.req.header('Upgrade')?.toLowerCase() !== 'websocket')
       return c.text('WebSocket required', 426);
     const stub = c.env.DUMP.get(c.env.DUMP.idFromName('me'));
-    return stub.fetch(new Request('https://dump.internal/events', c.req.raw));
+    return stub.fetch(new Request('https://dump.internal/me', c.req.raw));
   });
 
 app.all('/api/*', (c) => c.json({ error: 'Not found.' }, 404));

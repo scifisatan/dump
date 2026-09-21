@@ -7,9 +7,13 @@ import {
   encodeDump,
   exportSchema,
   makeDump,
-  SCHEMA_VERSION,
 } from '../src/shared/schema';
-import { mergeContent, newStore, validateContent } from '../src/shared/merge';
+import type { MergeableContent, MergeableStore } from 'tinybase';
+import { newStore, readRows } from '../src/shared/merge';
+
+// What TinyBase's synchronizers do once hashes show a difference.
+const mergeContent = (store: MergeableStore, content: MergeableContent) =>
+  store.applyMergeableChanges(JSON.parse(JSON.stringify(content)));
 
 describe('capture parser', () => {
   it('files explicit prefixes and retains the original thought and hashtags', () => {
@@ -33,7 +37,7 @@ describe('capture parser', () => {
   });
 });
 
-describe('synced custom lists and version migration', () => {
+describe('synced custom lists', () => {
   it('files into a custom list and keeps its stable identity across a rename', () => {
     const list = {
       id: crypto.randomUUID(),
@@ -50,27 +54,6 @@ describe('synced custom lists and version migration', () => {
     expect(dump.text).toBe('go for a walk');
     expect(decodeCollection(encodeCollection({ ...list, label: 'Outdoors' })).id).toBe(dump.list);
   });
-  it('adds list metadata without rewriting legacy dump cells or their clocks', () => {
-    const legacy = newStore();
-    const dump = makeDump('already saved');
-    legacy.setRow('dumps', dump.id, { data: encodeDump(dump) });
-    const legacyContent = legacy.getMergeableContent();
-    const upgraded = newStore().setMergeableContent(
-      validateContent({ version: 1, content: legacyContent }),
-    );
-    upgraded.setRow('lists', 'ideas', {
-      data: encodeCollection({ ...DEFAULT_LISTS[0], label: 'Sparks', position: -1 }),
-    });
-    expect(upgraded.getMergeableContent()[0][0].dumps).toEqual(legacyContent[0][0].dumps);
-    const restored = newStore().setMergeableContent(
-      validateContent({
-        version: SCHEMA_VERSION,
-        content: JSON.parse(JSON.stringify(upgraded.getMergeableContent())),
-      }),
-    );
-    expect(restored.getMergeableContent()).toEqual(upgraded.getMergeableContent());
-    expect(decodeCollection(restored.getCell('lists', 'ideas', 'data')).label).toBe('Sparks');
-  });
   it('merges independent list and dump changes across devices', () => {
     const phone = newStore();
     const desktop = newStore();
@@ -79,25 +62,17 @@ describe('synced custom lists and version migration', () => {
     desktop.setRow('lists', 'buy', {
       data: encodeCollection({ ...DEFAULT_LISTS[1], position: -2 }),
     });
-    mergeContent(
-      phone,
-      validateContent({ version: SCHEMA_VERSION, content: desktop.getMergeableContent() }),
-    );
+    mergeContent(phone, desktop.getMergeableContent());
     mergeContent(desktop, phone.getMergeableContent());
     expect(phone.getTables()).toEqual(desktop.getTables());
     expect(phone.getRowCount('dumps')).toBe(1);
     expect(decodeCollection(phone.getCell('lists', 'buy', 'data')).position).toBe(-2);
   });
-  it('accepts legacy backups and rejects invalid list records before merging', () => {
-    expect(
-      exportSchema.parse({ app: 'dump', version: 1, exported_at: '', dumps: [makeDump('legacy')] })
-        .dumps,
-    ).toHaveLength(1);
+  it('requires lists in backups and ignores lists whose ID does not match', () => {
+    expect(() => exportSchema.parse({ app: 'dump', exported_at: '', dumps: [] })).toThrow();
     const store = newStore();
     store.setRow('lists', 'buy', { data: encodeCollection(DEFAULT_LISTS[0]) });
-    expect(() =>
-      validateContent({ version: SCHEMA_VERSION, content: store.getMergeableContent() }),
-    ).toThrow('List ID mismatch');
+    expect(readRows(store).lists.find((list) => list.id === 'buy')?.label).toBe('Buy');
   });
 });
 
@@ -111,13 +86,13 @@ describe('TinyBase merge contract', () => {
     phone.setRow('dumps', a.id, { data: encodeDump(a) });
     desktop.setRow('dumps', b.id, { data: encodeDump(b) });
     for (const peer of [phone, desktop, phone, desktop])
-      mergeContent(server, validateContent({ version: 1, content: peer.getMergeableContent() }));
+      mergeContent(server, peer.getMergeableContent());
     mergeContent(phone, server.getMergeableContent());
     mergeContent(desktop, server.getMergeableContent());
     expect(phone.getTables()).toEqual(desktop.getTables());
     expect(server.getRowCount('dumps')).toBe(2);
   });
-  it('keeps a deletion tombstone when a stale device reconnects, then supports undo', () => {
+  it('keeps a deletion tombstone when a stale device reconnects, then lets a later edit win', () => {
     const phone = newStore();
     const desktop = newStore();
     const dump = makeDump('something to remove');
@@ -161,22 +136,16 @@ describe('TinyBase merge contract', () => {
       ['decor', 'ai'],
     ]).toContainEqual([result.list, result.classified_by]);
   });
-  it('rejects malformed payloads and mismatched IDs before merging', () => {
+  it('skips rows a peer sent that do not decode, instead of failing to open', () => {
     const store = newStore();
-    const dump = makeDump('hello');
-    store.setRow('dumps', crypto.randomUUID(), { data: encodeDump(dump) });
-    expect(() => validateContent({ version: 1, content: store.getMergeableContent() })).toThrow(
-      'ID mismatch',
-    );
-    expect(() => validateContent({ version: 2, content: [] })).toThrow();
-    expect(() =>
-      validateContent({
-        version: 1,
-        content: [
-          [{}, '', -1],
-          [{}, '', 0],
-        ],
-      }),
-    ).toThrow();
+    const good = makeDump('a real thought');
+    const spoofed = makeDump('wrong id');
+    store.setRow('dumps', good.id, { data: encodeDump(good) });
+    store.setRow('dumps', crypto.randomUUID(), { data: encodeDump(spoofed) });
+    store.setRow('dumps', crypto.randomUUID(), { data: '{"not":"a dump"}' });
+    store.setRow('lists', 'broken', { data: 'not json' });
+    const rows = readRows(store);
+    expect(rows.dumps.map((dump) => dump.id)).toEqual([good.id]);
+    expect(rows.lists.map((list) => list.id)).toEqual(DEFAULT_LISTS.map((list) => list.id));
   });
 });
