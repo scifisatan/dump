@@ -17,25 +17,28 @@ One person's capture-first app for thoughts and links. Capture immediately; orga
 - Motion uses opacity/transform at 120–180ms, honoring reduced motion. Preserve accessible buttons as alternatives to gestures.
 
 ## Stack and layout
-React, Vite, Cloudflare Vite plugin, Tailwind v4, TinyBase, Zod, Hono, motion, lucide-react, sonner, date-fns. One SQLite-backed `DumpDO`, addressed by `idFromName('me')`.
+React, Vite, Cloudflare Vite plugin, Tailwind v4, TinyBase, Zod, Hono, lucide-react, sonner, date-fns. One SQLite-backed `DumpDO`, addressed by `idFromName('me')`.
 
 `src/shared`: domain schema, API contract, store factory and validated row reading.
 `src/client`: responsive app, local state/persistence, sync, styles.
 `src/server`: Hono routes and SQLite-backed Agent.
-`scripts`: deployment and account checks. `tests`: unit and Playwright integration tests.
+`tests`: unit and Playwright integration tests.
 
 Client and Worker compile separately (`tsconfig.client.json`, `tsconfig.json`). Browser code imports the shared API contract, not Worker implementation types.
 
 ## Commands
-`npm run dev` — client, Worker, DO at http://127.0.0.1:6191.
+`npm run dev` — client, Worker, DO at http://localhost:6191.
 `npm run check` — format check, lint, domain/merge tests, type checks, production build.
-`npm run format` — format the repo with oxfmt (config in `.oxfmtrc.json`).
-`npm run lint` — Oxlint plus React Doctor's per-file React diagnostics.
+`npm run format` — format the repo with `vp fmt` (Oxfmt).
+`npm run lint` — `vp lint` (Oxlint) plus React Doctor's per-file React diagnostics.
+`npm test` — `vp test` (Vitest) unit tests, single run.
 `npm run test:e2e` — local test build on port 6192, isolated `.wrangler/test-state` storage.
-`npm run deploy` — check, build production, and deploy to the configured custom domain.
+`npx vp run deploy` — lint, test, typecheck, build production, and deploy to the configured custom domain.
 `npm run typegen` — regenerate Worker binding types when needed.
 
-Never deploy a `--mode test` build. The deployment script always rebuilds production.
+Tooling is Vite+ (`vite-plus`, CLI `vp`). All Vite, Vitest (`test`), Oxlint (`lint`), and Oxfmt (`fmt`) config lives in `vite.config.ts`; do not add `vitest.config.ts`, `.oxlintrc*`, or `.oxfmtrc*`. `vite` is aliased to `@voidzero-dev/vite-plus-core` through `overrides` in `package.json`. Tests import from `vite-plus/test`. The Cloudflare and PWA plugins are skipped when `VITEST` is set, because unit tests are plain Node code.
+
+Never deploy a `--mode test` build. The `deploy` task in `vite.config.ts` always rebuilds production.
 
 ## Code quality guardrails
 

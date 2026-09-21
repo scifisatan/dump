@@ -24,7 +24,7 @@ npm install
 npm run dev
 ```
 
-Open http://127.0.0.1:6191. That one process runs the React client, the Worker, and the Durable Object. Local data lives in this browser and in `.wrangler/state`. It is not your production data.
+Open http://localhost:6191. That one process runs the React client, the Worker, and the Durable Object. Local data lives in this browser and in `.wrangler/state`. It is not your production data.
 
 To turn on automatic filing locally, add your Jev key to `.env.local` (gitignored):
 
@@ -159,7 +159,6 @@ src/
     ├── index.ts       Hono routes, origin checks, security headers, Jev proxy
     ├── dump-do.ts     DumpDO (TinyBase WsServerDurableObject + SQLite persister)
     └── env.ts         bindings; jevKey()
-scripts/deploy.mjs     lint → test → typecheck → production build → wrangler deploy
 tests/                 Vitest unit tests + Playwright e2e
 ```
 
@@ -257,14 +256,14 @@ npx wrangler secret delete JEV_API_KEY
 ### 4. Deploy
 
 ```bash
-npm run deploy
+npx vp run deploy
 ```
 
-`scripts/deploy.mjs` always runs, in order:
+The `deploy` task (under `run.tasks` in `vite.config.ts`) always runs, in order:
 
 ```mermaid
 flowchart LR
-    L[oxlint] --> T[vitest] --> C[tsc client + worker] --> B["vite build<br/>--mode production"] --> D[wrangler deploy]
+    L[vp lint] --> T[vp test] --> C[tsc client + worker] --> B["vp build<br/>--mode production"] --> D[wrangler deploy]
 ```
 
 If any step fails, the deploy stops. Never deploy a `--mode test` build by hand: test builds swap out Jev and use isolated storage. The deploy script always rebuilds for production.
@@ -308,7 +307,9 @@ npm run test:e2e
 
 The e2e suite builds a local-only test build on port 6192 with isolated `.wrangler/test-state` storage. Its tests stand in for `/api/classify` instead of calling Jev.
 
-Other scripts: `npm run format` (oxfmt), `npm run lint` (Oxlint + React Doctor), `npm run typegen` (regenerate Worker binding types).
+Tooling is [Vite+](https://viteplus.dev): Vite, Vitest, Oxlint, and Oxfmt are all configured in `vite.config.ts`.
+
+Other scripts: `npm run format` (`vp fmt`), `npm run lint` (`vp lint` + React Doctor), `npm test` (`vp test`), `npm run typegen` (regenerate Worker binding types).
 
 ## Limitations and roadmap
 

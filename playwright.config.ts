@@ -5,11 +5,11 @@ export default defineConfig({
   fullyParallel: false,
   workers: 1,
   timeout: 45_000,
-  use: { baseURL: 'http://127.0.0.1:6192', trace: 'retain-on-failure' },
+  use: { baseURL: 'http://localhost:6192', trace: 'retain-on-failure' },
   projects: [{ name: 'chromium', use: { ...devices['Desktop Chrome'] } }],
   webServer: {
     command: 'npm run build:test && npm run preview -- --mode test',
-    url: 'http://127.0.0.1:6192',
+    url: 'http://localhost:6192',
     reuseExistingServer: false,
     timeout: 180_000,
   },

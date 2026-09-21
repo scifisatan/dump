@@ -4,19 +4,17 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "dev": "vite --host 127.0.0.1",
-    "build": "npm run typecheck && vite build",
+    "dev": "vp dev",
+    "build": "npm run typecheck && vp build",
     "typecheck": "tsc -p tsconfig.client.json && tsc -p tsconfig.json",
-    "preview": "vite preview --host 127.0.0.1 --port 6192 --strictPort",
-    "build:test": "vite build --mode test",
-    "deploy": "node scripts/deploy.mjs",
+    "preview": "vp preview",
+    "build:test": "vp build --mode test",
     "typegen": "wrangler types",
-    "lint": "oxlint -c .oxlintrc.jsonc src tests scripts",
-    "test": "vitest run",
+    "format": "vp fmt",
+    "lint": "vp lint",
+    "test": "vp test",
     "test:e2e": "playwright test",
-    "check": "npm run format:check && npm run lint && npm run test && npm run build",
-    "format": "oxfmt",
-    "format:check": "oxfmt --check"
+    "check": "vp check && vp test && npm run build"
   },
   "dependencies": {
     "@fontsource-variable/geist": "5.3.0",
@@ -26,7 +24,6 @@
     "date-fns": "4.4.0",
     "hono": "4.13.8",
     "lucide-react": "1.47.0",
-    "motion": "13.4.0",
     "next-themes": "0.4.6",
     "radix-ui": "1.6.7",
     "react": "19.3.0",
@@ -46,16 +43,17 @@
     "@types/node": "26.6.2",
     "@types/react": "19.3.0",
     "@types/react-dom": "19.3.0",
-    "@vitejs/plugin-react": "4.7.0",
-    "oxfmt": "0.70.0",
-    "oxlint": "1.83.0",
+    "@vitejs/plugin-react": "^6.1.1",
     "oxlint-plugin-react-doctor": "0.9.14",
-    "sharp": "0.35.4",
     "tailwindcss": "4.3.3",
     "typescript": "7.0.2",
-    "vite": "7.3.6",
+    "vite": "npm:@voidzero-dev/vite-plus-core@0.3.3",
     "vite-plugin-pwa": "1.3.0",
-    "vitest": "4.1.11",
+    "vite-plus": "0.3.3",
     "wrangler": "4.135.0"
+  },
+  "overrides": {
+    "vite": "npm:@voidzero-dev/vite-plus-core@0.3.3",
+    "vitest": "4.1.11"
   }
 }
