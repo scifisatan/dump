@@ -136,17 +136,19 @@ test('custom lists, filing, renaming and board order sync and survive reload', a
   await expect(b.getByRole('region', { name: `${name} shelf column`, exact: true })).toBeVisible();
   await a.getByRole('navigation').getByRole('link', { name: 'Board', exact: true }).click();
   await expect(a.getByRole('region', { name: `${name} shelf column`, exact: true })).toBeVisible();
-  const oldOrder = await a.locator('.board-column h2').allTextContents();
+  const columnTitles = (page: typeof a) =>
+    page.getByRole('region', { name: / column$/ }).getByRole('heading', { level: 2 });
+  const oldOrder = await columnTitles(a).allTextContents();
   await a.getByRole('button', { name: `Options for ${name} shelf`, exact: true }).click();
   await a.getByRole('menuitem', { name: 'Move left', exact: true }).click();
   const expected = [...oldOrder];
   const previousIndex = expected.indexOf(`${name} shelf`);
   expected.splice(previousIndex, 1);
   expected.splice(previousIndex - 1, 0, `${name} shelf`);
-  await expect(a.locator('.board-column h2')).toHaveText(expected);
-  await expect(b.locator('.board-column h2')).toHaveText(expected);
+  await expect(columnTitles(a)).toHaveText(expected);
+  await expect(columnTitles(b)).toHaveText(expected);
   await a.reload();
-  await expect(a.locator('.board-column h2')).toHaveText(expected);
+  await expect(columnTitles(a)).toHaveText(expected);
   await a.screenshot({ path: 'test-results/board-desktop.png', fullPage: true });
   await aContext.close();
   await bContext.close();
@@ -219,10 +221,9 @@ test('marketing is separate from notebook initialization and preserves the origi
   });
   await page.goto('/marketing');
   await expect(page.getByRole('heading', { level: 1 })).toContainText('Your mind is for ideas.');
-  await expect(page.locator('.brand-mark').first()).toHaveCSS(
-    'background-color',
-    'rgb(216, 238, 121)',
-  );
+  await expect(
+    page.getByRole('link', { name: 'About Dump' }).locator('svg').locator('..'),
+  ).toHaveCSS('background-color', 'rgb(216, 238, 121)');
   expect(await page.evaluate(() => indexedDB.databases())).toEqual([]);
   expect(apiRequests).toEqual([]);
   await page.screenshot({ path: 'test-results/marketing-desktop.png', fullPage: true });
