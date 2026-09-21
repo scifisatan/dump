@@ -1,6 +1,7 @@
 @import 'tailwindcss';
 @import 'tw-animate-css';
 @custom-variant dark (&:is(.dark *));
+@custom-variant keyboard (&:is([data-keyboard] *));
 
 :root {
   --background: #f7f7f5;
@@ -96,6 +97,10 @@
 @layer base {
   * {
     border-color: var(--border);
+  }
+  html,
+  body {
+    overscroll-behavior: none;
   }
   body {
     margin: 0;

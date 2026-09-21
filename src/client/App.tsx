@@ -37,6 +37,7 @@ import {
   useDumpStore,
 } from './store';
 import { cn } from './lib/utils';
+import { useVisualViewport } from './lib/viewport';
 import { Brand } from './components/Brand';
 import { DumpCard, type DumpActions } from './components/DumpCard';
 import { ListDot } from './components/ListDot';
@@ -107,6 +108,7 @@ export default function App() {
   const refocus = useRef(false);
   const contentRef = useRef<HTMLDivElement>(null);
   const atBottom = useRef(true);
+  useVisualViewport();
   const lists = state.lists.filter((list) => !list.deleted);
   const active = state.dumps.filter((dump) => !dump.deleted);
   // The inbox shows every open dump with its list; `unfiled` only feeds Sort inbox, and leaves
@@ -133,6 +135,8 @@ export default function App() {
     .reverse();
   // An empty view centers a larger composer; otherwise it is pinned below the dumps.
   const empty = state.ready && selected.length === 0;
+  // Done is a record of finished dumps, not a place to capture new ones.
+  const composing = !done;
 
   useEffect(() => {
     void initializeStore().catch((error) =>
@@ -266,7 +270,7 @@ export default function App() {
   const inputProps = {
     ref: inputRef,
     'aria-label': 'Capture a thought',
-    placeholder: done ? 'Dump a new thought…' : 'What’s on your mind?',
+    placeholder: 'What’s on your mind?',
     value: draft,
     maxLength: 20_000,
     disabled: !state.ready,
@@ -381,11 +385,13 @@ export default function App() {
       </main>
     );
   return (
-    <div className="h-dvh">
+    // Pinned to the visible viewport so the composer rides above the phone keyboard. The height
+    // eases with the iOS keyboard's curve and duration, which is longer than other motion here.
+    <div className="fixed inset-x-0 top-(--vv-top,0px) h-(--vv-height,100dvh) overflow-hidden pointer-coarse:transition-[height] pointer-coarse:duration-250 pointer-coarse:ease-[cubic-bezier(0.38,0.7,0.125,1)]">
       <aside className="fixed inset-y-0 left-0 z-20 flex w-59.5 flex-col overflow-y-auto overscroll-contain border-r bg-sidebar px-4.5 pt-7.75 pb-4.5 max-tablet:w-53 max-tablet:px-3.25 max-phone:hidden">
         {navigation}
       </aside>
-      <main className="ml-59.5 flex h-dvh min-w-0 flex-col max-tablet:ml-53 max-phone:ml-0">
+      <main className="ml-59.5 flex h-full min-w-0 flex-col max-tablet:ml-53 max-phone:ml-0">
         <header className="shrink-0 border-b">
           <div className={cn(column, 'flex h-16 items-center gap-2 max-phone:h-14')}>
             <Sheet open={menuOpen} onOpenChange={setMenuOpen}>
@@ -530,41 +536,44 @@ export default function App() {
                       ? 'Room for something good.'
                       : 'A clear inbox. A clearer head.'}
                 </h2>
-                <p className="mt-2 mb-7 text-[12px] leading-[1.8] text-muted-foreground">
+                <p className="mt-2 text-[12px] leading-[1.8] text-muted-foreground">
                   {done
                     ? 'Check off a thought when you’re finished with it.'
                     : currentList
                       ? `Dump something here, or type !${currentList.label.toLowerCase()} anywhere.`
                       : 'Drop a thought, a link, or that thing you don’t want to forget.'}
                 </p>
-                <form className={cn(composer, 'rounded-[14px] text-left')} onSubmit={submit}>
-                  <div className="flex items-start gap-3.5 px-5.5 pt-5.75 max-phone:gap-2.5 max-phone:px-4 max-phone:pt-4.75">
-                    <Asterisk size={25} className="mt-0.5 shrink-0 text-accent-foreground" />
-                    <textarea
-                      {...inputProps}
-                      className="max-h-70 min-h-17.75 w-full resize-none border-0 bg-transparent text-[17px] leading-[1.6] outline-none placeholder:text-muted-foreground placeholder:opacity-85 max-phone:text-[16px]"
-                      rows={2}
-                    />
-                  </div>
-                  <div className="flex items-center justify-between gap-2.5 pt-3.25 pr-3.75 pb-3.75 pl-6 max-phone:pt-3 max-phone:pr-3.25 max-phone:pb-3.25 max-phone:pl-4.5">
-                    <span className="text-[10px] text-muted-foreground">
-                      Anything goes.
-                      <span className="ml-1.75 max-phone:hidden">
-                        Try <code className={hint}>!buy</code> or{' '}
-                        <code className={hint}>#weekend</code>
+                {composing && (
+                  <form className={cn(composer, 'mt-7 rounded-[14px] text-left')} onSubmit={submit}>
+                    <div className="flex items-start gap-3.5 px-5.5 pt-5.75 max-phone:gap-2.5 max-phone:px-4 max-phone:pt-4.75">
+                      <Asterisk size={25} className="mt-0.5 shrink-0 text-accent-foreground" />
+                      <textarea
+                        {...inputProps}
+                        className="max-h-70 min-h-17.75 w-full resize-none border-0 bg-transparent text-[17px] leading-[1.6] outline-none placeholder:text-muted-foreground placeholder:opacity-85 max-phone:text-[16px]"
+                        rows={2}
+                      />
+                    </div>
+                    <div className="flex items-center justify-between gap-2.5 pt-3.25 pr-3.75 pb-3.75 pl-6 max-phone:pt-3 max-phone:pr-3.25 max-phone:pb-3.25 max-phone:pl-4.5">
+                      <span className="text-[10px] text-muted-foreground">
+                        Anything goes.
+                        <span className="ml-1.75 max-phone:hidden">
+                          Try <code className={hint}>!buy</code> or{' '}
+                          <code className={hint}>#weekend</code>
+                        </span>
                       </span>
-                    </span>
-                    <Button
-                      type="submit"
-                      className="text-[11px]"
-                      disabled={!draft.trim() || !state.ready}
-                      aria-label="Save dump"
-                    >
-                      Dump it
-                      <ArrowUp size={17} />
-                    </Button>
-                  </div>
-                </form>
+                      <Button
+                        type="submit"
+                        className="text-[11px]"
+                        disabled={!draft.trim() || !state.ready}
+                        aria-label="Save dump"
+                        onPointerDown={(event) => event.preventDefault()}
+                      >
+                        Dump it
+                        <ArrowUp size={17} />
+                      </Button>
+                    </div>
+                  </form>
+                )}
                 {isInbox && (
                   <div className="mt-6 flex flex-wrap justify-center gap-2 max-phone:gap-1.75">
                     {[
@@ -629,8 +638,8 @@ export default function App() {
             )}
           </div>
         </div>
-        {!empty && (
-          <div className="shrink-0 pb-[max(12px,env(safe-area-inset-bottom))]">
+        {!empty && composing && (
+          <div className="shrink-0 pb-[max(16px,calc(env(safe-area-inset-bottom)+6px))] keyboard:pb-4">
             <div className={column}>
               <form
                 className={cn(composer, 'flex items-end gap-2.5 rounded-[16px] py-1.5 pr-1.5 pl-4')}
@@ -648,6 +657,8 @@ export default function App() {
                   className="size-9 shrink-0 rounded-full"
                   disabled={!draft.trim() || !state.ready}
                   aria-label="Save dump"
+                  // Keep focus in the composer so a tap does not close the phone keyboard.
+                  onPointerDown={(event) => event.preventDefault()}
                 >
                   <ArrowUp size={18} />
                 </Button>
