@@ -1,20 +1,8 @@
 import { createIndexedDbPersister } from 'tinybase/persisters/persister-indexed-db';
 import { createBroadcastChannelSynchronizer } from 'tinybase/synchronizers/synchronizer-broadcast-channel';
-import { createWsSynchronizer } from 'tinybase/synchronizers/synchronizer-ws-client';
-import type { ClientPlatform, ServerLink } from '../core/client';
-import { requestList } from '../core/classify';
-import {
-  channelName,
-  ConnectionError,
-  databaseName,
-  inspectServer,
-  requestTicket,
-  syncUrl,
-  Unauthorized,
-  type ServerLocation,
-  type ServerProfile,
-} from '../core/connection';
-import { SYNC_FRAGMENT_BYTES, SYNC_TIMEOUT_SECONDS } from '../shared/merge';
+import type { ClientPlatform } from '../core/client';
+import { channelName, databaseName, type ServerProfile } from '../core/connection';
+import { createServerLink } from '../core/server-link';
 import { readKey } from './profiles';
 
 export function browserPlatform(profile: ServerProfile): ClientPlatform {
@@ -67,7 +55,7 @@ export function browserPlatform(profile: ServerProfile): ClientPlatform {
         },
       };
     },
-    server: profile.server && serverLink(profile.id, profile.server),
+    server: profile.server && createServerLink(profile.server, () => readKey(profile.id)),
     isOnline: () => navigator.onLine,
     watch(resume, offline, suspend) {
       const visible = () => {
@@ -97,58 +85,5 @@ export function browserPlatform(profile: ServerProfile): ClientPlatform {
         },
       };
     },
-  };
-}
-
-function serverLink(profileId: string, server: ServerLocation): ServerLink {
-  // Read on every use, so a key entered again in Settings applies without reopening.
-  const key = () => {
-    const value = readKey(profileId);
-    if (!value) throw new Unauthorized('Enter this server’s owner key in Settings.');
-    return value;
-  };
-  return {
-    async inspect(signal) {
-      const info = await inspectServer(server.baseUrl, signal);
-      signal.throwIfAborted();
-      if (info.instanceId !== server.instanceId)
-        throw new ConnectionError(
-          'This address now belongs to a different notebook. Connect again in Settings to open it separately.',
-        );
-      return info;
-    },
-    async connect(store, info, signal, closed) {
-      const ticket = await requestTicket(server.baseUrl, key(), signal);
-      const socket = new WebSocket(syncUrl(server.baseUrl, info.instanceId, ticket));
-      const abort = () => socket.close();
-      signal.addEventListener('abort', abort, { once: true });
-      try {
-        const synchronizer = await createWsSynchronizer(
-          store,
-          socket,
-          SYNC_TIMEOUT_SECONDS,
-          undefined,
-          undefined,
-          undefined,
-          SYNC_FRAGMENT_BYTES,
-        );
-        socket.addEventListener('close', closed);
-        return {
-          async start() {
-            await synchronizer.startSync();
-          },
-          async destroy() {
-            socket.removeEventListener('close', closed);
-            signal.removeEventListener('abort', abort);
-            await synchronizer.destroy();
-          },
-        };
-      } catch (error) {
-        signal.removeEventListener('abort', abort);
-        socket.close();
-        throw error;
-      }
-    },
-    classify: (request, signal) => requestList(server.baseUrl, key(), request, signal),
   };
 }

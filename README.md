@@ -13,6 +13,7 @@ Dump is built for one person using one device at a time. It is **local-first**: 
 - [Quick start](#quick-start)
 - [Using Dump](#using-dump)
 - [Connect your own server](#connect-your-own-server)
+- [Mac app](#mac-app)
 - [Architecture](#architecture)
 - [Why these decisions](#why-these-decisions)
 - [Why Jev](#why-jev)
@@ -97,7 +98,32 @@ Switching flushes local writes, stops the previous client's synchronization and 
 
 `/api/ping` exposes a persistent namespace-scoped Durable Object ID and capabilities. Clients validate the response and pin that identity before syncing. WebSocket upgrades include the expected identity, which the server checks again. Replacing a server at the same address does not upload the old notebook into it: connect again in Settings to create a separate local profile. Renaming a server URL also creates a separate local profile; it is not an automatic migration.
 
-Raycast and Android clients are not planned soon. The reusable TypeScript client core and platform adapter contract would let them share the web app's sync logic. Cloudflare is the supported server implementation; VPS/Docker hosting needs a separate adapter.
+The [Mac app](#mac-app) reuses the TypeScript client core through its platform adapter contract; Raycast and Android clients could do the same but are not planned soon. Cloudflare is the supported server implementation; VPS/Docker hosting needs a separate adapter.
+
+## Mac app
+
+A menu bar app for capturing from anywhere: press **⇧⌘Space**, type, press Return. It is the same notebook as the web app (it runs the web app's own client core), so it works offline, files with `!list`, lets Jev sort, and syncs with your server.
+
+Build and install it (needs Xcode with Swift 6, and Node):
+
+```bash
+npm run mac:install
+```
+
+This builds `mac/build/Dump.app`, copies it to `/Applications`, and opens it. Run it again to update: the running copy saves and quits first. It isn't notarized, so build it on the Mac that runs it rather than sharing the app. To keep Keychain access to your owner key across rebuilds, put your signing identity (`security find-identity -v -p codesigning`) in `mac/.env.local`, which is not committed:
+
+```bash
+DUMP_SIGN_IDENTITY="Apple Development: Your Name (TEAMID)"
+```
+
+| In the panel | |
+| --- | --- |
+| Return | Save and close |
+| Shift+Return or Option+Return | New line |
+| Tab / Shift+Tab, Cmd+0–9 | Choose the list (Cmd+0 is Inbox). A `!list` prefix in the text wins. |
+| Escape, or click elsewhere | Close; the draft is kept |
+
+The menu bar icon opens Settings: the shortcut, open at login, and your server (address → **Check** → owner key → **Connect and Sync**; notes made on the Mac join the server's notebook). Under Advanced is the web app address the Mac presents to your server. It must be in the server's `ALLOWED_CLIENT_ORIGINS`, which lists the hosted app by default. Notebooks live in `~/Library/Application Support/Dump`, and owner keys in your Keychain.
 
 ## Architecture
 
@@ -206,6 +232,7 @@ src/
 ├── core/              reusable client logic, no React/browser/Worker dependencies
 │   ├── client.ts      notebook instance, commands, AI queue, start/stop lifecycle
 │   ├── connection.ts  server URL validation, identity checks, storage names
+│   ├── server-link.ts one server over fetch + WebSocket (browser and Mac)
 │   └── classify.ts    stateless classification HTTP client
 ├── client/            React app
 │   ├── store.ts       React subscription and browser export adapter
@@ -221,6 +248,12 @@ src/
     ├── origins.ts     client origin allowlist
     ├── dump-do.ts     DumpDO (TinyBase WsServerDurableObject + SQLite persister)
     └── env.ts         bindings; jevKey()
+mac/                   menu bar app (Swift); see Mac app
+├── engine/            src/core + TinyBase bundled for JavaScriptCore, with web API polyfills
+├── Sources/DumpKit/   runs the engine: native timers, HTTP, WebSocket, files, Keychain, profiles
+├── Sources/Dump/      AppKit/SwiftUI shell: hotkey, capture panel, settings, menu bar
+├── Sources/dump-check/  headless sync check against a running server
+└── scripts/           build-app.sh (build, sign, --install) and the icon renderer
 tests/                 Vitest unit tests + Playwright e2e
 wrangler.jsonc         API server deploy config
 wrangler.client.jsonc  web client deploy config (static assets only)
@@ -242,6 +275,7 @@ The client and Worker compile separately (`tsconfig.client.json`, `tsconfig.json
 | **No undo** | Done, filing, and remove are final. Earlier undo logic could restore unrelated fields and conflicted with sync. | Mistakes are fixed by hand. Removal has a confirm step where it matters (Clear done, delete list). |
 | **Validate on read, not on the server** | The sync server relays rows it doesn't understand, which keeps it simple. Clients use Zod to reject malformed data. | A bad row is skipped rather than rejected at the source. |
 | **One hosted app, a server per person** | The web app is static files that one host serves to everyone; each person's server is one Worker and DO. Either half redeploys alone, and future Raycast/Android clients use the same API. `npm run dev` still starts both. Hono provides a small typed RPC contract. | Two deploys, and every client origin must be listed in `ALLOWED_CLIENT_ORIGINS`. The server is tied to Cloudflare's runtime. |
+| **The Mac app runs the web core** | JavaScriptCore runs the same TypeScript client core, so sync, filing, and merge rules can't drift from the web app; Swift supplies only the platform (timers, HTTP, WebSocket, files, Keychain). | A small set of web API polyfills to maintain, and the app must be rebuilt when the core changes. |
 | **One owner key, not accounts** | Each server belongs to one person, so a single generated secret covers every device with no sign-up, cookies, or session store. Tokens work across sites, where cookies would not. | Cutting off one lost device means rotating the key and entering the new one on the others. See [Security model](#security-model). |
 
 ## Why Jev
@@ -389,6 +423,12 @@ npm run test:e2e
 The e2e suite runs two local-only API servers with `wrangler dev` (6192 and 6193, isolated `.wrangler/test-state` and `.wrangler/test-state-peer`, env and owner key from `tests/e2e/server.env`) plus the built web client (6194), served by `wrangler dev` with its production headers. A setup project onboards once through the landing page; the other tests reuse that saved notebook, and the connection tests start as new visitors. It covers the landing page at `/` without a redirect, onboarding, a wrong key, device-only notebooks joining a server later, switching, database/tab isolation, identity replacement, signing out and back in, the CSP, offline capture, live sync, owner-key checks on HTTP and WebSocket, and origin policy. E2e servers never call Jev; classification tests stand in for `/api/classify`. Unit tests cover client lifecycle, device-only and signed-out states, cancelled AI responses, failed saves, owner keys and tickets, and validation without module mocks.
 
 Tooling is [Vite+](https://viteplus.dev): Vite, Vitest, Oxlint, and Oxfmt are all configured in `vite.config.ts`.
+
+The Mac app has its own tests (engine lifecycle, offline capture and reload, `!list` parsing, UTF-8 hashing parity, URL normalization, timers, error messages):
+
+```bash
+cd mac && swift test
+```
 
 Other scripts: `npm run format` (`vp fmt`), `npm run lint` (`vp lint` + React Doctor), `npm test` (`vp test`), `npm run typegen` (regenerate Worker binding types).
 

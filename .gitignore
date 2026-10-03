@@ -13,3 +13,10 @@ worker-configuration.d.ts
 *.log
 .claude/
 .DS_Store
+
+# Mac app: SwiftPM and Xcode state, and generated output (engine.js, Dump.app, icons)
+mac/.build/
+mac/.swiftpm/
+mac/build/
+*.xcuserstate
+xcuserdata/

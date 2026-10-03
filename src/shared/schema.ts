@@ -69,6 +69,18 @@ export const exportSchema = z.object({
   lists: z.array(collectionSchema).max(500),
 });
 
+// The list a leading `!list` names (by ID, or by label with hyphens for spaces), and the length
+// of that prefix; null when there is no prefix or it names no list.
+export function listPrefix(raw: string, lists: Collection[] = DEFAULT_LISTS) {
+  const prefix = raw.trim().match(/^!([a-z0-9-]+)(?:\s+|$)/i);
+  const name = prefix?.[1].toLowerCase();
+  const list = lists.find(
+    (item) =>
+      !item.deleted && (item.id === name || item.label.toLowerCase().replace(/\s+/g, '-') === name),
+  );
+  return prefix && list ? { list: list.id, length: prefix[0].length } : null;
+}
+
 export function makeDump(
   raw: string,
   id = crypto.randomUUID(),
@@ -76,15 +88,9 @@ export function makeDump(
   lists: Collection[] = DEFAULT_LISTS,
 ): Dump {
   let text = raw.trim();
-  const prefix = text.match(/^!([a-z0-9-]+)(?:\s+|$)/i);
-  const name = prefix?.[1].toLowerCase();
-  const list =
-    lists.find(
-      (item) =>
-        !item.deleted &&
-        (item.id === name || item.label.toLowerCase().replace(/\s+/g, '-') === name),
-    )?.id ?? null;
-  if (list) text = text.slice(prefix![0].length).trim();
+  const prefix = listPrefix(text, lists);
+  const list = prefix?.list ?? null;
+  if (prefix) text = text.slice(prefix.length).trim();
   const tags = [
     ...new Set(
       [...text.matchAll(/(?:^|\s)#([\p{L}\p{N}_-]{1,64})(?=\s|$|[,.!?])/gu)].map((match) =>

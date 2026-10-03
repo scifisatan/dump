@@ -1,0 +1,9 @@
+{
+  "extends": "../../tsconfig.json",
+  "compilerOptions": {
+    // DOM types describe the APIs the polyfills provide; JavaScriptCore has none of them natively.
+    "lib": ["ES2022", "DOM", "DOM.Iterable"],
+    "types": []
+  },
+  "include": [".", "../../src/core", "../../src/shared"]
+}
