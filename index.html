@@ -14,8 +14,133 @@
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <link rel="apple-touch-icon" href="/icon-192.png" />
     <title>Dump — a place for everything on your mind</title>
+    <script src="/theme-init.js"></script>
+    <!-- The loading screen works before any script loads; src/client/boot.ts hides it. -->
+    <style>
+      :root {
+        --boot-bg: #f7f7f5;
+        --boot-text: #767970;
+      }
+      :root.dark {
+        --boot-bg: #191b17;
+        --boot-text: #a0a792;
+      }
+      html {
+        background: var(--boot-bg);
+      }
+      #boot {
+        position: fixed;
+        inset: 0;
+        z-index: 100;
+        display: grid;
+        place-content: center;
+        justify-items: center;
+        gap: 20px;
+        padding: 16px;
+        background: var(--boot-bg);
+        color: var(--boot-text);
+        font:
+          12px/1.7 system-ui,
+          -apple-system,
+          sans-serif;
+        text-align: center;
+        animation: boot-in 260ms ease-out 200ms both;
+      }
+      #boot[data-state='leaving'] {
+        animation: boot-out 220ms ease-in both;
+        pointer-events: none;
+      }
+      #boot[data-state='hidden'] {
+        display: none;
+      }
+      #boot svg {
+        display: block;
+        width: 56px;
+        height: 56px;
+        transform: rotate(-5deg);
+        animation: boot-breathe 1.6s cubic-bezier(0.65, 0, 0.35, 1) infinite;
+      }
+      #boot .star {
+        transform-box: fill-box;
+        transform-origin: center;
+        animation: boot-turn 1.6s cubic-bezier(0.65, 0, 0.35, 1) infinite;
+      }
+      #boot p {
+        margin: 0;
+        animation: boot-in 500ms ease-out 2s both;
+      }
+      #boot .slow {
+        position: absolute;
+        right: 16px;
+        bottom: max(32px, env(safe-area-inset-bottom));
+        left: 16px;
+        animation-delay: 10s;
+      }
+      #boot a {
+        color: inherit;
+      }
+      @keyframes boot-in {
+        from {
+          opacity: 0;
+        }
+      }
+      @keyframes boot-out {
+        to {
+          opacity: 0;
+        }
+      }
+      /* The asterisk has six arms, so each 60° turn lands where it started. */
+      @keyframes boot-turn {
+        45%,
+        100% {
+          transform: rotate(60deg);
+        }
+      }
+      @keyframes boot-breathe {
+        0%,
+        62%,
+        100% {
+          transform: rotate(-5deg) scale(1);
+        }
+        22% {
+          transform: rotate(-5deg) scale(0.92);
+        }
+        45% {
+          transform: rotate(-5deg) scale(1.04);
+        }
+      }
+      @media (prefers-reduced-motion: reduce) {
+        #boot svg,
+        #boot .star {
+          animation: none;
+        }
+      }
+    </style>
   </head>
   <body>
+    <div id="boot" data-state="shown" role="progressbar" aria-label="Opening Dump">
+      <svg viewBox="0 0 64 64" aria-hidden="true">
+        <rect width="64" height="64" rx="18" fill="#d8ee79" />
+        <path
+          class="star"
+          d="M32 15v34M17.3 23.5l29.4 17M17.3 40.5l29.4-17"
+          fill="none"
+          stroke="#252629"
+          stroke-width="7"
+          stroke-linecap="round"
+        />
+      </svg>
+      <p>Opening a little headspace…</p>
+      <p class="slow">Still opening. Check your connection, or <a href="">reload</a>.</p>
+    </div>
+    <noscript>
+      <style>
+        #boot {
+          display: none;
+        }
+      </style>
+      <p>Dump needs JavaScript to run.</p>
+    </noscript>
     <div id="root"></div>
     <script type="module" src="/src/client/main.tsx"></script>
   </body>

@@ -2,7 +2,8 @@ import { useRef } from 'react';
 import { ArrowDownToLine, Monitor, Moon, Sun, Upload } from 'lucide-react';
 import { useTheme } from 'next-themes';
 import { toast } from 'sonner';
-import { exportDumps, importDumps } from '../store';
+import { currentProfile, exportDumps, importDumps } from '../store';
+import { ServerSettings } from './ServerSettings';
 import { Button } from './ui/button';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from './ui/dialog';
 
@@ -15,10 +16,12 @@ export function SettingsDialog({
   open,
   onOpenChange,
   ready,
+  signedOut,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   ready: boolean;
+  signedOut: boolean;
 }) {
   const { theme, setTheme } = useTheme();
   const importRef = useRef<HTMLInputElement>(null);
@@ -29,6 +32,10 @@ export function SettingsDialog({
           <DialogTitle>Your space, your way.</DialogTitle>
           <DialogDescription>A few small things to make yourself at home.</DialogDescription>
         </DialogHeader>
+        <section className={section}>
+          <h3 className={heading}>Your server</h3>
+          <ServerSettings signedOut={signedOut} />
+        </section>
         <section className={section}>
           <h3 className={heading}>Appearance</h3>
           <div className="flex flex-wrap gap-2.25">
@@ -76,7 +83,9 @@ export function SettingsDialog({
         <section className={section}>
           <h3 className={heading}>About this space</h3>
           <p className={note}>
-            This deployment is public. Anyone with the address can access the shared space.
+            {currentProfile.server
+              ? 'Your thoughts live on this device and your own server. Only devices with its owner key can reach them.'
+              : 'Your thoughts live only on this device. Export a backup now and then.'}
           </p>
           <a href="/marketing" className="text-[11px] text-accent-foreground hover:underline">
             A little about Dump ↗

@@ -44,6 +44,7 @@ import { ListDot } from './components/ListDot';
 import { ListEditor } from './components/ListEditor';
 import { SearchDialog } from './components/SearchDialog';
 import { SettingsDialog } from './components/SettingsDialog';
+import { holdBoot } from './boot';
 import { TriageDialog } from './components/TriageDialog';
 import { Button } from './components/ui/button';
 import {
@@ -143,6 +144,9 @@ export default function App() {
       setFatal(error instanceof Error ? error.message : 'Could not open local storage.'),
     );
   }, []);
+  // Keep the loading screen up until this device's notes are loaded, so the empty inbox never
+  // flashes before them.
+  useLayoutEffect(() => (state.ready || fatal ? undefined : holdBoot()), [state.ready, fatal]);
   useEffect(() => {
     if (state.ready && window.matchMedia('(pointer:fine)').matches) inputRef.current?.focus();
   }, [state.ready]);
@@ -248,24 +252,31 @@ export default function App() {
     setSearchOpen(true);
   }
   const syncPhase =
-    state.storageError || state.sync === 'offline' || state.sync === 'error'
+    state.storageError ||
+    state.sync === 'offline' ||
+    state.sync === 'error' ||
+    state.sync === 'signed-out'
       ? 'problem'
-      : state.saving || state.sync !== 'synced'
+      : state.saving || (state.sync !== 'synced' && state.sync !== 'local')
         ? 'busy'
         : 'ok';
   const syncText = state.storageError
     ? 'Storage needs attention'
     : state.saving
       ? 'Saving on this device…'
-      : state.sync === 'offline'
-        ? 'Offline · saved here'
-        : state.sync === 'synced'
-          ? state.localServer
-            ? 'Saved · local development'
-            : 'Everything is synced'
-          : state.sync === 'error'
-            ? 'Saved here · sync pending'
-            : 'Syncing your space…';
+      : state.sync === 'local'
+        ? 'Saved on this device'
+        : state.sync === 'signed-out'
+          ? 'Signed out · saved here'
+          : state.sync === 'offline'
+            ? 'Offline · saved here'
+            : state.sync === 'synced'
+              ? state.localServer
+                ? 'Saved · local development'
+                : 'Everything is synced'
+              : state.sync === 'error'
+                ? 'Saved here · sync pending'
+                : 'Syncing your space…';
 
   const inputProps = {
     ref: inputRef,
@@ -302,6 +313,11 @@ export default function App() {
       {state.sync === 'error' && (
         <button className="font-medium underline" onClick={() => void syncNow()}>
           Retry
+        </button>
+      )}
+      {state.sync === 'signed-out' && (
+        <button className="font-medium underline" onClick={() => setSettingsOpen(true)}>
+          Sign in
         </button>
       )}
     </span>
@@ -682,7 +698,12 @@ export default function App() {
         select={(dump) => navigate(`${homeOf(dump)}?item=${dump.id}`)}
         settings={() => setSettingsOpen(true)}
       />
-      <SettingsDialog open={settingsOpen} onOpenChange={setSettingsOpen} ready={state.ready} />
+      <SettingsDialog
+        open={settingsOpen}
+        onOpenChange={setSettingsOpen}
+        ready={state.ready}
+        signedOut={state.sync === 'signed-out'}
+      />
       {editor && (
         <ListEditor
           list={editor.list}

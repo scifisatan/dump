@@ -1,3 +1,6 @@
+// The API server: one Worker and one SQLite-backed Durable Object per owner. It serves no UI.
+// Everyone uses the hosted web app at https://dump.abishrestha.com.np (wrangler.client.jsonc)
+// and enters their own server's address. Forks keep that origin in ALLOWED_CLIENT_ORIGINS.
 {
   "$schema": "node_modules/wrangler/config-schema.json",
   "name": "dump",
@@ -7,12 +10,8 @@
   "compatibility_flags": ["nodejs_compat"],
   "workers_dev": false,
   "preview_urls": false,
-  "routes": [{ "pattern": "dump.abishrestha.com.np", "custom_domain": true }],
-  "assets": {
-    "binding": "ASSETS",
-    "not_found_handling": "single-page-application",
-    "run_worker_first": true,
-  },
+  "routes": [{ "pattern": "dump-api.abishrestha.com.np", "custom_domain": true }],
+  "vars": { "ALLOWED_CLIENT_ORIGINS": "https://dump.abishrestha.com.np" },
   "durable_objects": {
     "bindings": [{ "name": "DUMP", "class_name": "DumpDO" }],
   },

@@ -8,8 +8,7 @@ import {
   type ClassifyRequest,
 } from '../shared/classify';
 import type { Collection, ListId } from '../shared/schema';
-
-const api = hc<Api>('/');
+import { ownerKeyHeaders, Unauthorized } from './connection';
 
 export class ClassifyUnavailable extends Error {}
 
@@ -25,11 +24,25 @@ export function classifyRequest(text: string, lists: Collection[]): ClassifyRequ
 
 // Jev's list, or null when it is unsure. Throws on network or server failure so the caller
 // can retry later; ClassifyUnavailable means this deployment has classification turned off.
-export async function requestList(request: ClassifyRequest): Promise<ListId | null> {
+export async function requestList(
+  baseUrl: string,
+  key: string,
+  request: ClassifyRequest,
+  signal: AbortSignal,
+): Promise<ListId | null> {
+  const api = hc<Api>(baseUrl);
   const response = await api.api.classify.$post(
     { json: request },
-    { init: { signal: AbortSignal.timeout(10_000) } },
+    {
+      headers: ownerKeyHeaders(key),
+      init: {
+        signal: AbortSignal.any([signal, AbortSignal.timeout(10_000)]),
+        credentials: 'omit',
+        redirect: 'error',
+      },
+    },
   );
+  if (response.status === 401) throw new Unauthorized('The owner key no longer works.');
   if (response.status === 503) throw new ClassifyUnavailable();
   if (!response.ok) throw new Error(`Classification failed: ${response.status}`);
   const result = classifyResultSchema.parse(await response.json());

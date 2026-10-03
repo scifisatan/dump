@@ -1,8 +1,15 @@
+import { lazy, Suspense, useEffect, useState, type ComponentProps } from 'react';
 import { ArrowRight, ArrowUp, Asterisk, Check, Cloud, Inbox, Search, Sparkles } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { Brand } from './components/Brand';
 import { ListDot } from './components/ListDot';
 import { Button } from './components/ui/button';
+import { hasNotebook } from './registry';
+
+// Kept out of the landing page's own bundle, then fetched while a new visitor reads, so
+// Get started opens at once.
+const loadOnboarding = () => import('./components/Onboarding');
+const Onboarding = lazy(loadOnboarding);
 
 const features = [
   {
@@ -25,7 +32,31 @@ const features = [
   },
 ];
 
+// New visitors start setup here; people with a notebook go straight back to it.
+function Start({
+  returning,
+  onStart,
+  children,
+  ...props
+}: ComponentProps<typeof Button> & { returning: boolean; onStart: () => void }) {
+  return returning ? (
+    <Button asChild {...props}>
+      <Link to="/">{children}</Link>
+    </Button>
+  ) : (
+    <Button {...props} onClick={onStart}>
+      {children}
+    </Button>
+  );
+}
+
 export default function Marketing() {
+  const returning = hasNotebook();
+  const [onboarding, setOnboarding] = useState(false);
+  useEffect(() => {
+    if (!returning) void loadOnboarding();
+  }, [returning]);
+  const start = { returning, onStart: () => setOnboarding(true) };
   return (
     <div className="mx-auto max-w-320 px-15 max-tablet:px-8 max-phone:px-5.5">
       <header className="flex h-26.25 items-center justify-between gap-5 max-phone:h-20.5">
@@ -35,16 +66,14 @@ export default function Marketing() {
         <a href="#how-it-works" className="text-[11px] text-muted-foreground max-phone:hidden">
           A little less on your mind
         </a>
-        <Button
-          asChild
+        <Start
+          {...start}
           variant="outline"
           className="text-[11px] max-phone:px-2.5 max-phone:py-2 max-phone:text-[10px]"
         >
-          <Link to="/">
-            Open your space
-            <ArrowRight />
-          </Link>
-        </Button>
+          {returning ? 'Open your space' : 'Get started'}
+          <ArrowRight />
+        </Start>
       </header>
       <main>
         <section className="pt-20.75 pb-14.5 text-center max-phone:pt-14 max-phone:pb-10">
@@ -62,12 +91,10 @@ export default function Marketing() {
             <br className="max-phone:hidden" /> Put it all in Dump. It files each one into the right
             list for you.
           </p>
-          <Button asChild size="lg" className="px-5.5 py-6 text-[12px] has-[>svg]:px-5.5">
-            <Link to="/">
-              A little more headspace
-              <ArrowRight />
-            </Link>
-          </Button>
+          <Start {...start} size="lg" className="px-5.5 py-6 text-[12px] has-[>svg]:px-5.5">
+            A little more headspace
+            <ArrowRight />
+          </Start>
           <small className="mt-3.75 block text-[10px] text-muted-foreground">
             Capture first. Dump does the sorting.
           </small>
@@ -173,22 +200,25 @@ export default function Marketing() {
             <br />
             More room to think.
           </h2>
-          <Button asChild>
-            <Link to="/">
-              Open Dump
-              <ArrowRight />
-            </Link>
-          </Button>
+          <Start {...start}>
+            {returning ? 'Open Dump' : 'Get started'}
+            <ArrowRight />
+          </Start>
           <p className="mt-5.75 text-[10px] leading-[1.8] text-muted-foreground">
-            This is a personal project. The current deployment is public.
+            Bring your own server, or keep everything on this device.
           </p>
         </section>
       </main>
       <footer className="flex items-center justify-between gap-5 border-t py-7.5 text-[10px] text-muted-foreground max-phone:flex-wrap max-phone:gap-3.75 max-phone:pb-[calc(25px+env(safe-area-inset-bottom))]">
         <Brand className="text-[22px]" markClassName="size-7" />
         <span className="max-phone:text-[9px]">Out of your head. Into your space.</span>
-        <Link to="/">Back to your space ↗</Link>
+        {returning && <Link to="/">Back to your space ↗</Link>}
       </footer>
+      {onboarding && (
+        <Suspense>
+          <Onboarding onClose={() => setOnboarding(false)} />
+        </Suspense>
+      )}
     </div>
   );
 }

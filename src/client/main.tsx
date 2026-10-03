@@ -1,10 +1,12 @@
-import React, { lazy, Suspense, useSyncExternalStore } from 'react';
+import React, { lazy, Suspense, useLayoutEffect, useSyncExternalStore } from 'react';
 import ReactDOM from 'react-dom/client';
 import { registerSW } from 'virtual:pwa-register';
 import { Toaster, toast } from 'sonner';
 import { ThemeProvider, useTheme } from 'next-themes';
 import { BrowserRouter, Route, Routes } from 'react-router-dom';
 import '@fontsource-variable/geist';
+import { dismissBoot, holdBoot, releasePageLoad } from './boot';
+import { hasNotebook } from './registry';
 import './styles.css';
 
 const App = lazy(() => import('./App'));
@@ -31,10 +33,24 @@ function Notifications() {
   );
 }
 
+// While a screen's code loads, the loading screen from index.html stays up (see boot.ts).
+function Loading() {
+  useLayoutEffect(holdBoot, []);
+  return null;
+}
+// Runs after React's first commit, once any screen that is still loading holds the boot screen.
+function FirstCommit() {
+  useLayoutEffect(releasePageLoad, []);
+  return null;
+}
+
 class ErrorBoundary extends React.Component<React.PropsWithChildren, { error: boolean }> {
   state = { error: false };
   static getDerivedStateFromError() {
     return { error: true };
+  }
+  componentDidCatch() {
+    dismissBoot();
   }
   render() {
     if (this.state.error)
@@ -60,20 +76,17 @@ ReactDOM.createRoot(document.getElementById('root')!).render(
     >
       <ErrorBoundary>
         <BrowserRouter>
-          <Suspense
-            fallback={
-              <div className="grid min-h-dvh place-content-center gap-5 text-center text-muted-foreground">
-                Opening a little headspace…
-              </div>
-            }
-          >
+          <Suspense fallback={<Loading />}>
             <Routes>
               <Route path="/marketing" element={<Marketing />} />
-              <Route path="*" element={<App />} />
+              {/* Decided from local settings, not a redirect: returning visitors get their
+                  notebook at once and never load the landing page; new ones get onboarding. */}
+              <Route path="*" element={hasNotebook() ? <App /> : <Marketing />} />
             </Routes>
           </Suspense>
         </BrowserRouter>
         <Notifications />
+        <FirstCommit />
       </ErrorBoundary>
     </ThemeProvider>
   </React.StrictMode>,

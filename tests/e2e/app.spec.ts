@@ -1,5 +1,47 @@
 import { expect, test, type Page } from '@playwright/test';
 
+test('a returning visitor opens the notebook at / under the CSP, without the landing page', async ({
+  page,
+}) => {
+  const landingCode: string[] = [];
+  const violations: string[] = [];
+  page.on('request', (request) => {
+    if (/\/assets\/(Marketing|Onboarding)-/.test(request.url())) landingCode.push(request.url());
+  });
+  page.on('console', (message) => {
+    if (message.text().includes('Content Security Policy')) violations.push(message.text());
+  });
+  const response = await page.goto('/');
+  expect(response?.headers()['content-security-policy']).toContain("script-src 'self'");
+  await expect(page.getByRole('textbox', { name: 'Capture a thought' })).toBeEnabled();
+  await expect(page.getByRole('status')).toContainText('Saved · local development');
+  await expect(page.getByRole('progressbar', { name: 'Opening Dump' })).toBeHidden();
+  expect(landingCode).toEqual([]);
+  expect(violations).toEqual([]);
+});
+
+test('a slow load shows the loading screen in the saved theme, then the notebook', async ({
+  page,
+}) => {
+  await page.addInitScript(() => localStorage.setItem('dump-theme', 'dark'));
+  // Holds the app's code back, as a slow network would.
+  let arrive = () => {};
+  const arrived = new Promise<void>((resolve) => (arrive = resolve));
+  await page.route(/\/assets\/index-[\w-]+\.js$/, async (route) => {
+    await arrived;
+    await route.continue();
+  });
+  await page.goto('/', { waitUntil: 'commit' });
+  const loading = page.getByRole('progressbar', { name: 'Opening Dump' });
+  await expect(loading).toHaveCSS('opacity', '1');
+  await expect(page.locator('html')).toHaveClass(/dark/);
+  await expect(loading).toHaveCSS('background-color', 'rgb(25, 27, 23)');
+  await page.screenshot({ path: 'test-results/loading-dark.png' });
+  arrive();
+  await expect(page.getByRole('textbox', { name: 'Capture a thought' })).toBeEnabled();
+  await expect(loading).toBeHidden();
+});
+
 test('two devices merge offline captures, persist through reload, and honor deletion', async ({
   browser,
 }) => {
@@ -65,12 +107,13 @@ test('prefix filing, search, export and additive restore work', async ({ page })
   await expect(page.getByText('0 dumps restored. Existing items were kept.')).toBeVisible();
 });
 
-// Stands in for the Worker's Jev proxy: answers with `list` after `delay` ms.
+// Stands in for the server's Jev proxy: answers with `list` after `delay` ms.
 async function fakeJev(page: Page, list: string | null, delay: number) {
-  await page.route('/api/ping', (route) =>
-    route.fulfill({ json: { ok: true, mode: 'local', classify: true } }),
-  );
-  await page.route('/api/classify', async (route) => {
+  await page.route('**/api/ping', async (route) => {
+    const response = await route.fetch();
+    await route.fulfill({ json: { ...(await response.json()), classify: true } });
+  });
+  await page.route('**/api/classify', async (route) => {
     await new Promise((resolve) => setTimeout(resolve, delay));
     await route.fulfill({ json: { list, confidence: list ? 0.95 : 0 } }).catch(() => {});
   });
@@ -116,7 +159,7 @@ test('an unsure Jev defaults to To do, and filing by hand beats a late answer', 
 });
 
 test('without Jev, captures stay in the inbox unfiled', async ({ page }) => {
-  // Test builds never have a Jev key, so /api/ping reports classification off.
+  // E2e servers never have a Jev key, so /api/ping reports classification off.
   const text = `unsorted thought ${crypto.randomUUID().slice(0, 8)}`;
   await page.goto('/');
   const input = page.getByRole('textbox', { name: 'Capture a thought' });
@@ -137,8 +180,10 @@ test('without Jev, captures stay in the inbox unfiled', async ({ page }) => {
     .filter({ hasNot: page.getByText(/^(Remove|Skip|Close)$/) });
   await expect(dialog.getByRole('button', { name: /^Ideas/ })).toContainText('1');
   expect(await listButtons.count()).toBeGreaterThanOrEqual(await listLinks.count());
+  // The count disappears once the last unfiled thought is sorted.
+  const count = dialog.getByText(/thoughts? to give a home/);
   const remaining = async () =>
-    Number((await dialog.getByText(/thoughts? to give a home/).textContent())?.match(/\d+/)?.[0]);
+    (await count.count()) ? Number((await count.textContent())?.match(/\d+/)?.[0]) : 0;
   const before = await remaining();
   await page.keyboard.press('1');
   await expect.poll(remaining).toBe(before - 1);
@@ -180,7 +225,10 @@ test('live sync reaches an open device without polling', async ({ browser, reque
     timeout: 5_000,
   });
   // Plain requests are refused; only WebSocket upgrades reach the sync server.
-  expect((await request.get('/api/sync')).status()).toBe(426);
+  const plain = await request.get('http://localhost:6192/api/sync', {
+    headers: { Origin: 'http://localhost:6194' },
+  });
+  expect(plain.status()).toBe(426);
   await aContext.close();
   await bContext.close();
 });
@@ -320,5 +368,9 @@ test('marketing is separate from notebook initialization and preserves the origi
   await page.setViewportSize({ width: 390, height: 844 });
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
   await page.screenshot({ path: 'test-results/marketing-mobile.png', fullPage: true });
+  // Opening the notebook from here loads its code behind the same loading screen.
+  await page.getByRole('link', { name: 'Open your space' }).click();
+  await expect(page.getByRole('textbox', { name: 'Capture a thought' })).toBeEnabled();
+  await expect(page.getByRole('progressbar', { name: 'Opening Dump' })).toBeHidden();
   await context.close();
 });

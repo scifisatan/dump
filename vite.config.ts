@@ -1,23 +1,19 @@
 import { defineConfig } from 'vite-plus';
 import react from '@vitejs/plugin-react';
 import tailwindcss from '@tailwindcss/vite';
-import { cloudflare } from '@cloudflare/vite-plugin';
 import { VitePWA } from 'vite-plugin-pwa';
 import { fileURLToPath } from 'node:url';
 
-// Unit tests are plain Node code; the Worker runtime and service worker plugins only get in the way.
+// Unit tests are plain Node code; the service worker plugin only gets in the way.
 const isVitest = Boolean(process.env.VITEST);
+// Vite builds only the web client. Wrangler builds and runs the API Worker (wrangler.jsonc).
+const verify = ['vp lint', 'vp test', 'npm run typecheck'];
 
-export default defineConfig(({ mode }) => ({
+export default defineConfig({
   resolve: { alias: { '@': fileURLToPath(new URL('./src/client', import.meta.url)) } },
   plugins: [
     react(),
     tailwindcss(),
-    !isVitest &&
-      cloudflare({
-        persistState: { path: mode === 'test' ? '.wrangler/test-state' : '.wrangler/state' },
-        inspectorPort: false,
-      }),
     !isVitest &&
       VitePWA({
         registerType: 'prompt',
@@ -39,24 +35,27 @@ export default defineConfig(({ mode }) => ({
         workbox: {
           globPatterns: ['**/*.{js,css,html,svg,png,woff2}'],
           navigateFallback: '/index.html',
-          navigateFallbackDenylist: [/^\/api\//, /^\/cdn-cgi\//],
+          navigateFallbackDenylist: [/^\/cdn-cgi\//],
           cleanupOutdatedCaches: true,
         },
       }),
   ],
-  server: { port: 6191 },
-  preview: { port: 6192 },
+  build: { outDir: 'dist/client' },
+  server: { port: 6191, strictPort: true },
+  preview: { port: 6194, strictPort: true },
   run: {
     tasks: {
-      // Always rebuild for production; never deploy a `--mode test` build.
-      deploy: {
-        command: [
-          'vp lint',
-          'vp test',
-          'npm run typecheck',
-          'vp build --mode production',
-          'wrangler deploy',
-        ],
+      // `npm run dev` runs this beside the client, as a separate origin like production, with a
+      // fixed local owner key that the dev client prefills.
+      api: {
+        command:
+          'wrangler dev --port 6190 --local-upstream localhost:6190 --var ALLOWED_CLIENT_ORIGINS:http://localhost:6191 --var OWNER_KEY:dump-local-development-owner-key',
+        cache: false,
+      },
+      web: { command: 'vp dev', dependsOn: ['api'], cache: false },
+      'deploy:server': { command: [...verify, 'wrangler deploy'], cache: false },
+      'deploy:client': {
+        command: [...verify, 'vp build', 'wrangler deploy --config wrangler.client.jsonc'],
         cache: false,
       },
     },
@@ -85,4 +84,4 @@ export default defineConfig(({ mode }) => ({
       'react-doctor/effect-needs-cleanup': 'warn',
     },
   },
-}));
+});

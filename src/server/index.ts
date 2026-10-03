@@ -1,13 +1,16 @@
 import { Hono } from 'hono';
+import { createMiddleware } from 'hono/factory';
 import { jevKey, type Env } from './env';
 import { pingSchema } from '../shared/api';
+import { bearer, createTicket, matchesKey, ownerKey, verifyTicket } from './auth';
 import { classifyRequestSchema, jevRequest, readJevResponse } from '../shared/classify';
+import { allowsOrigin } from './origins';
 export { DumpDO } from './dump-do';
 
 const app = new Hono<{ Bindings: Env }>();
 
-// The app is public, so this route spends the Jev key for anyone who calls it. A per-isolate
-// budget is a coarse brake, not a quota; removing JEV_API_KEY turns the route off.
+// Only the owner can reach this route, but a per-isolate budget still brakes a runaway client.
+// Removing JEV_API_KEY turns the route off.
 const CLASSIFY_PER_MINUTE = 60;
 let classifyWindow = { start: 0, count: 0 };
 function classifyAllowed(now = Date.now()) {
@@ -16,12 +19,21 @@ function classifyAllowed(now = Date.now()) {
 }
 
 app.use('*', async (c, next) => {
-  if (c.req.path.startsWith('/api/')) {
-    c.header('Cache-Control', 'no-store');
-    const origin = c.req.header('Origin');
-    const expected = new URL(c.req.url).origin;
-    if (origin && origin !== expected) return c.json({ error: 'Origin rejected.' }, 403);
-    if (c.req.method === 'POST' && !origin) return c.json({ error: 'Origin required.' }, 403);
+  c.header('Cache-Control', 'no-store');
+  c.header('Vary', 'Origin');
+  const origin = c.req.header('Origin');
+  if (!allowsOrigin(origin, c.env.ALLOWED_CLIENT_ORIGINS))
+    return c.json(
+      {
+        error: 'Origin rejected. Add this client origin to ALLOWED_CLIENT_ORIGINS on the server.',
+      },
+      403,
+    );
+  c.header('Access-Control-Allow-Origin', origin);
+  if (c.req.method === 'OPTIONS') {
+    c.header('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
+    c.header('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+    return c.body(null, 204);
   }
   await next();
   c.header('X-Content-Type-Options', 'nosniff');
@@ -29,15 +41,47 @@ app.use('*', async (c, next) => {
   c.header('X-Frame-Options', 'DENY');
 });
 
+const UNCONFIGURED = 'This server has no owner key yet. Set OWNER_KEY and redeploy.';
+
+// Everything except discovery needs the owner key: a bearer header on HTTP, and a ticket bought
+// with it on the WebSocket upgrade (see auth.ts).
+const requireOwner = createMiddleware<{ Bindings: Env; Variables: { ownerKey: string } }>(
+  async (c, next) => {
+    const key = ownerKey(c.env);
+    if (!key) return c.json({ error: UNCONFIGURED }, 503);
+    if (!(await matchesKey(bearer(c.req.header('Authorization')), key)))
+      return c.json({ error: 'Wrong owner key.' }, 401);
+    c.set('ownerKey', key);
+    await next();
+  },
+);
+
 const routes = app
   .get('/api/ping', (c) => {
     const hostname = new URL(c.req.url).hostname;
     const mode = ['localhost', '127.0.0.1', '[::1]'].includes(hostname) ? 'local' : 'cloud';
     const classify = !!jevKey(c.env);
-    return c.json(pingSchema.parse({ ok: true, mode, classify }));
+    // The namespace-scoped object ID is stable without waking the sync server before a
+    // WebSocket exists (which would leave its initial peer handshake waiting for a timeout).
+    const instanceId = c.env.DUMP.idFromName('me').toString();
+    return c.json(
+      pingSchema.parse({
+        ok: true,
+        app: 'dump',
+        instanceId,
+        syncProtocol: 'tinybase-ws',
+        auth: ownerKey(c.env) ? 'owner-key' : 'unconfigured',
+        mode,
+        classify,
+      }),
+    );
+  })
+  .post('/api/sync-ticket', requireOwner, async (c) => {
+    const ticket = await createTicket(c.get('ownerKey'), c.env.DUMP.idFromName('me').toString());
+    return c.json({ ticket });
   })
   // Stateless proxy to Jev: the browser cannot call it directly (CORS) or hold the key.
-  .post('/api/classify', async (c) => {
+  .post('/api/classify', requireOwner, async (c) => {
     const key = jevKey(c.env);
     if (!key) return c.json({ error: 'Classification is off.' }, 503);
     if (!classifyAllowed()) return c.json({ error: 'Too many requests.' }, 429);
@@ -62,12 +106,18 @@ const routes = app
   .get('/api/sync', async (c) => {
     if (c.req.header('Upgrade')?.toLowerCase() !== 'websocket')
       return c.text('WebSocket required', 426);
-    const stub = c.env.DUMP.get(c.env.DUMP.idFromName('me'));
-    return stub.fetch(new Request('https://dump.internal/me', c.req.raw));
+    const id = c.env.DUMP.idFromName('me');
+    if (c.req.query('instance') !== id.toString())
+      return c.text('Notebook identity changed. Reconnect from Settings.', 409);
+    const key = ownerKey(c.env);
+    if (!key) return c.text(UNCONFIGURED, 503);
+    if (!(await verifyTicket(key, id.toString(), c.req.query('ticket') ?? '')))
+      return c.text('Sync ticket rejected. Sign in again.', 401);
+    // The ticket stops here: the sync server only needs the upgrade itself.
+    return c.env.DUMP.get(id).fetch(new Request('https://dump.internal/me', c.req.raw));
   });
 
-app.all('/api/*', (c) => c.json({ error: 'Not found.' }, 404));
-app.get('*', (c) => c.env.ASSETS.fetch(c.req.raw));
+app.all('*', (c) => c.json({ error: 'Not found.' }, 404));
 app.onError((error, c) => {
   console.error('Request failed:', error.name);
   return c.json({ error: 'Unable to complete the request. Your local data is safe.' }, 500);

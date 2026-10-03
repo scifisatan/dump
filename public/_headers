@@ -1,0 +1,7 @@
+# Applied by Cloudflare's static hosting to the web app (wrangler.client.jsonc). The owner key
+# lives in this origin's storage, so no script runs unless it is our own bundle. Servers are
+# whatever each person connects, hence the open connect-src.
+/*
+  Content-Security-Policy: default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self'; connect-src 'self' https: wss: http://localhost:* ws://localhost:* http://127.0.0.1:* ws://127.0.0.1:*; worker-src 'self'; manifest-src 'self'; object-src 'none'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'
+  X-Content-Type-Options: nosniff
+  Referrer-Policy: no-referrer

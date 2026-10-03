@@ -4,11 +4,12 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "dev": "vp dev",
-    "build": "npm run typecheck && vp build",
+    "dev": "vp run --parallel web",
+    "build": "npm run typecheck && npm run build:client && npm run build:server",
+    "build:client": "vp build",
+    "build:server": "wrangler deploy --dry-run --outdir dist/server",
     "typecheck": "tsc -p tsconfig.client.json && tsc -p tsconfig.json",
     "preview": "vp preview",
-    "build:test": "vp build --mode test",
     "typegen": "wrangler types",
     "format": "vp fmt",
     "lint": "vp lint",
@@ -36,7 +37,6 @@
     "zod": "4.6.5"
   },
   "devDependencies": {
-    "@cloudflare/vite-plugin": "1.56.0",
     "@cloudflare/workers-types": "5.20260920.1",
     "@playwright/test": "1.63.0",
     "@tailwindcss/vite": "4.3.3",

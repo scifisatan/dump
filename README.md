@@ -6,16 +6,17 @@
 
 A capture-first home for thoughts and links. Type something, press Enter, and it is saved. Organizing it can wait, and with [Jev](#why-jev) switched on the app files it for you.
 
-Dump is built for one person using one device at a time. It is **local-first**: every capture lands on your device right away, then syncs to other devices through a single Cloudflare Durable Object.
+Dump is built for one person using one device at a time. It is **local-first**: every capture lands on your device right away, then syncs to your other devices through your own server: a single Cloudflare Durable Object. Everyone uses the same web app at **https://dump.abishrestha.com.np** and connects it to a server they deploy themselves, or keeps the notebook on one device.
 
-> **Public deployment.** There is no login. Anyone who can reach the hostname reads and writes the same data store. This is a deliberate product decision for a personal app; see [Security model](#security-model) before deploying your own copy.
+> **One key per server.** Your server has a single secret, `OWNER_KEY`. Each of your devices enters it once; without it, a server reveals only that it is a Dump server. See [Security model](#security-model).
 
 - [Quick start](#quick-start)
 - [Using Dump](#using-dump)
+- [Connect your own server](#connect-your-own-server)
 - [Architecture](#architecture)
 - [Why these decisions](#why-these-decisions)
 - [Why Jev](#why-jev)
-- [Deploy to Cloudflare](#deploy-to-cloudflare)
+- [Deploy your server](#deploy-your-server)
 - [Checks and tests](#checks-and-tests)
 - [Limitations and roadmap](#limitations-and-roadmap)
 
@@ -28,7 +29,7 @@ npm install
 npm run dev
 ```
 
-Open http://localhost:6191. That one process runs the React client, the Worker, and the Durable Object. Local data lives in this browser and in `.wrangler/state`. It is not your production data.
+Open http://localhost:6191. `npm run dev` starts both halves on separate origins, as in production: the web client (Vite, port 6191) and the API server (Wrangler: Worker and Durable Object, port 6190). On first run choose **Get started → Sync with your server**: the local address and the dev server's owner key (`dump-local-development-owner-key`) are prefilled, so choose **Check**, then **Connect to this server**. Local data lives in this browser and in `.wrangler/state`. It is not your production data.
 
 To turn on automatic filing locally, add your Jev key to `.env.local` (gitignored):
 
@@ -48,9 +49,55 @@ echo "JEV_API_KEY=your-key" >> .env.local
 | Sort the inbox | `1`–`9` pick a list, Right Arrow skips, Backspace removes. |
 | Lists | Create them from the sidebar. Rename, recolor, or delete one with the pencil in the list header. |
 | Done / remove | Final: there is no undo. Removal leaves a hidden tombstone so other devices don't bring the dump back. |
+| First run | On the landing page, **Get started**: connect your server (address → **Check** → owner key → **Connect**) or keep the notebook on this device only. |
+| Server | Settings → Your server: switch servers, connect a device-only notebook to a server, or sign in again after the owner key changes. Saved notebooks reopen offline. |
 | Backups | Settings → Export or Import JSON. Import only adds missing records and never overwrites existing ones. |
 
 Every view works like a chat: a header, the dumps (newest at the bottom), and the composer pinned underneath. `/marketing` is a separate landing page that doesn't load the notebook.
+
+## Connect your own server
+
+Dump has one web app for everyone, at **https://dump.abishrestha.com.np**, and one server per person. You deploy your own server ([Deploy your server](#deploy-your-server)) and the app talks to it directly. Your notes travel only between your devices and your server; there is no central Dump service or account registry.
+
+Each server is one owner's notebook: one Worker, one SQLite-backed `DumpDO`, still addressed by `idFromName('me')`. It serves only the API, never the UI.
+
+Open the app and choose **Get started → Sync with your server**. Enter your server's full origin (for example `https://dump.<your-subdomain>.workers.dev`), choose **Check**, then enter its owner key and connect. Nothing is saved until the server accepts the key. Your password manager can save the key per server (the address is the username), which makes setting up the next device quick. Change servers later under **Settings → Your server**. HTTPS is required except on localhost for development. Paths, credentials, and query strings are rejected.
+
+Returning visitors go straight to their notebook: the app decides from this browser's own settings, with no redirect and without loading the landing page. New visitors see the landing page at whatever address they opened.
+
+Your server answers only the web app origins listed in its `ALLOWED_CLIENT_ORIGINS` variable (in `wrangler.jsonc`). It lists the hosted app by default, so a fork works with it unchanged:
+
+```jsonc
+"vars": {
+  "ALLOWED_CLIENT_ORIGINS": "https://dump.abishrestha.com.np"
+}
+```
+
+To also use a self-hosted copy of the app, add its origin after a comma. Use exact origins without trailing slashes. The allowlist applies to HTTP and WebSocket requests; HTTP preflights are supported. Requests without an `Origin` header, or from any unlisted origin (the server's own included), get 403. This is browser-origin policy, **not authentication**: non-browser callers can send any `Origin`. The owner key is what protects your notebook.
+
+The hosted app's code comes from `dump.abishrestha.com.np`, so using it means trusting whoever deploys it, as with any web app. To remove that dependency, host the app yourself.
+
+### Host your own copy of the web app (optional)
+
+```bash
+npm run build:client
+```
+
+This writes a static site to `dist/client/`. Point `wrangler.client.jsonc` at your account and domain and deploy it with `npx vp run deploy:client`, or publish `dist/client/` to any static HTTPS host with an SPA fallback to `index.html`. Add that origin to your server's `ALLOWED_CLIENT_ORIGINS`. Client and server deploy independently, but formats remain experimental: update both together when changing contracts. There are no API/schema version numbers or compatibility migrations.
+
+### Keep a notebook on this device only
+
+Choose **Just this device** during setup to skip the server. The notebook lives only in this browser: no sync, no automatic filing, and nothing leaves the device. The app asks the browser to keep its storage, but Safari still clears site data after seven days without a visit unless the app is installed to the home screen, so install it and export backups from Settings. To add a server later, open **Settings → Your server** and connect one; this notebook's thoughts are added to the server's.
+
+### Keep notebooks separate
+
+Each saved connection has its own local database (`dump-v1-<profile-id>`) and BroadcastChannel. Connection settings live in this browser under `dump-connections`.
+
+Switching flushes local writes, stops the previous client's synchronization and AI work, then reloads the app into the selected notebook. A failed local save prevents switching. Other tabs keep their existing connection until reloaded. Unsubmitted composer text is not transferred. Opening a saved connection works offline; sync resumes when available. Use export/additive import to deliberately move data between notebooks.
+
+`/api/ping` exposes a persistent namespace-scoped Durable Object ID and capabilities. Clients validate the response and pin that identity before syncing. WebSocket upgrades include the expected identity, which the server checks again. Replacing a server at the same address does not upload the old notebook into it: connect again in Settings to create a separate local profile. Renaming a server URL also creates a separate local profile; it is not an automatic migration.
+
+Raycast and Android clients are not planned soon. The reusable TypeScript client core and platform adapter contract would let them share the web app's sync logic. Cloudflare is the supported server implementation; VPS/Docker hosting needs a separate adapter.
 
 ## Architecture
 
@@ -62,7 +109,7 @@ flowchart LR
         direction TB
         UI["React UI"]
         Mem["TinyBase<br/>MergeableStore<br/>(in memory)"]
-        IDB[("IndexedDB<br/>dump-v1")]
+        IDB[("IndexedDB<br/>per connection")]
         UI -- "capture (sync)" --> Mem
         Mem -- "persist (async)" --> IDB
     end
@@ -71,9 +118,11 @@ flowchart LR
         Tab2["TinyBase store"]
     end
 
-    subgraph CF["☁️ Cloudflare"]
+    Static["☁️ Hosted web app<br/>static files + service worker<br/>dump.abishrestha.com.np"]
+
+    subgraph CF["☁️ Your server (Cloudflare)"]
         direction TB
-        Worker["Worker (Hono)<br/>/api/ping<br/>/api/classify<br/>/api/sync<br/>static assets"]
+        Worker["Worker (Hono)<br/>/api/ping<br/>/api/classify<br/>/api/sync"]
         DO["DumpDO<br/>WsServerDurableObject<br/>idFromName('me')"]
         SQL[("Durable Object<br/>SQLite")]
         Worker -- "WebSocket upgrade" --> DO
@@ -82,6 +131,7 @@ flowchart LR
 
     Jev["Jev<br/>api.typesafe.ai"]
 
+    Static -- "app shell, cached for offline" --> UI
     Mem <-- "BroadcastChannel" --> Tab2
     Mem <-- "WebSocket: hash diff + live edits" --> Worker
     UI -. "POST /api/classify<br/>(after capture)" .-> Worker
@@ -152,21 +202,31 @@ src/
 │   ├── schema.ts      Zod codecs for dumps, lists, backups; TinyBase table schema
 │   ├── merge.ts       store factory, readRows (validated decode), sync tuning
 │   ├── classify.ts    Jev request/response mapping, threshold
-│   └── api.ts         typed API contract (Hono RPC)
+│   └── api.ts         typed API contract and validated server capabilities
+├── core/              reusable client logic, no React/browser/Worker dependencies
+│   ├── client.ts      notebook instance, commands, AI queue, start/stop lifecycle
+│   ├── connection.ts  server URL validation, identity checks, storage names
+│   └── classify.ts    stateless classification HTTP client
 ├── client/            React app
-│   ├── store.ts       local state, IndexedDB, WS + tab sync, domain commands, autoFile
-│   ├── classify.ts    calls /api/classify
+│   ├── store.ts       React subscription and browser export adapter
+│   ├── browser-platform.ts  IndexedDB, WebSocket, tab sync, device events
+│   ├── profiles.ts    saved notebooks (server or device only) and owner keys
+│   ├── registry.ts    has this browser a notebook? decides what / shows
 │   ├── App.tsx        notebook shell
-│   ├── Marketing.tsx  lazy landing page
-│   └── components/    cards, search, list editor, settings; ui/ = shadcn/Radix
-└── server/            Cloudflare Worker
-    ├── index.ts       Hono routes, origin checks, security headers, Jev proxy
+│   ├── Marketing.tsx  lazy landing page with onboarding
+│   └── components/    cards, search, onboarding, server settings; ui/ = shadcn/Radix
+└── server/            Cloudflare Worker, API only
+    ├── index.ts       Hono routes, origin checks, owner-key checks, security headers, Jev proxy
+    ├── auth.ts        owner key comparison and WebSocket tickets
+    ├── origins.ts     client origin allowlist
     ├── dump-do.ts     DumpDO (TinyBase WsServerDurableObject + SQLite persister)
     └── env.ts         bindings; jevKey()
 tests/                 Vitest unit tests + Playwright e2e
+wrangler.jsonc         API server deploy config
+wrangler.client.jsonc  web client deploy config (static assets only)
 ```
 
-The client and Worker compile separately (`tsconfig.client.json`, `tsconfig.json`). Browser code imports the shared API contract but never Worker implementation types.
+The client and Worker compile separately (`tsconfig.client.json`, `tsconfig.json`) and build separately: Vite builds only the client into `dist/client/`, and Wrangler bundles the Worker (`npm run build:server` dry-runs it into `dist/server/`). Browser code imports the shared API contract but never Worker implementation types.
 
 ## Why these decisions
 
@@ -181,8 +241,8 @@ The client and Worker compile separately (`tsconfig.client.json`, `tsconfig.json
 | **Latest change wins, including offline edits** | The owner uses one device at a time. Precedence rules and revision checks would add complexity with no real benefit here. | A stale offline device can overwrite a newer change to the same dump. |
 | **No undo** | Done, filing, and remove are final. Earlier undo logic could restore unrelated fields and conflicted with sync. | Mistakes are fixed by hand. Removal has a confirm step where it matters (Clear done, delete list). |
 | **Validate on read, not on the server** | The sync server relays rows it doesn't understand, which keeps it simple. Clients use Zod to reject malformed data. | A bad row is skipped rather than rejected at the source. |
-| **Hono on Workers + Cloudflare Vite plugin** | One `npm run dev` runs client, Worker, and DO together. Hono provides a small typed RPC contract. | Tied to Cloudflare's runtime. |
-| **No authentication (for now)** | This is a personal tool, and the owner deferred auth on purpose. | Anyone who has the URL has full access, and the classify route spends your Jev key. See [Security model](#security-model). |
+| **One hosted app, a server per person** | The web app is static files that one host serves to everyone; each person's server is one Worker and DO. Either half redeploys alone, and future Raycast/Android clients use the same API. `npm run dev` still starts both. Hono provides a small typed RPC contract. | Two deploys, and every client origin must be listed in `ALLOWED_CLIENT_ORIGINS`. The server is tied to Cloudflare's runtime. |
+| **One owner key, not accounts** | Each server belongs to one person, so a single generated secret covers every device with no sign-up, cookies, or session store. Tokens work across sites, where cookies would not. | Cutting off one lost device means rotating the key and entering the new one on the others. See [Security model](#security-model). |
 
 ## Why Jev
 
@@ -200,13 +260,13 @@ That fits Dump's main AI rule: **AI may file, never rewrite.**
 
 **Why a Worker proxy?** Jev's CORS policy rejects browser origins, and the API key must never ship in the bundle. `POST /api/classify` is stateless. It validates `{ text, lists }`, forwards one Choice question, checks the answer against the lists it sent (a list could be deleted during the request), and returns `{ list, confidence }`.
 
-**Why is it optional?** Jev is on exactly when `JEV_API_KEY` is set. Without the key, or with fewer than two lists, dumps stay in the inbox for you to sort, and `/api/ping` reports `classify: false`. `--mode test` builds never call Jev.
+**Why is it optional?** Jev is on exactly when `JEV_API_KEY` is set. Without the key, or with fewer than two lists, dumps stay in the inbox for you to sort, and `/api/ping` reports `classify: false`. E2e servers never call Jev.
 
 **Why does the threshold sit at 0.4?** In early tests, correct Buy/Decor picks came back at 0.60–0.65 confidence. Jev's top pick still beats the To do fallback when it's somewhat unsure. The threshold should be tuned against real labelled dumps.
 
-## Deploy to Cloudflare
+## Deploy your server
 
-Production target: `https://dump.abishrestha.com.np`. The steps below also work for your own fork.
+To use Dump you only need your own server: deploy it, then connect https://dump.abishrestha.com.np to it. The owner's own server runs at `https://dump-api.abishrestha.com.np`; the hosted app is deployed from this repository with `deploy:client`.
 
 ### Prerequisites
 
@@ -226,7 +286,7 @@ npx wrangler whoami
 
 `whoami` prints your account ID.
 
-### 2. Point `wrangler.jsonc` at your account and domain
+### 2. Point `wrangler.jsonc` at your account
 
 Forks must change these fields:
 
@@ -235,17 +295,30 @@ Forks must change these fields:
   "name": "dump",
   "account_id": "<your account id>",
   "routes": [{ "pattern": "dump.example.com", "custom_domain": true }],
+  "vars": { "ALLOWED_CLIENT_ORIGINS": "https://dump.abishrestha.com.np" },
   "workers_dev": false,
   "preview_urls": false,
 }
 ```
 
-- **Custom domain (recommended):** set `pattern` to a hostname on a zone you own. Cloudflare creates the DNS record and certificate on deploy.
-- **No domain yet:** remove `routes` and set `"workers_dev": true`. The app is then served at `https://dump.<your-subdomain>.workers.dev`.
+- **Custom domain:** set `pattern` to a hostname on a zone you own. Cloudflare creates the DNS record and certificate on deploy.
+- **No domain:** remove `routes` and set `"workers_dev": true`. Your server is then at `https://dump.<your-subdomain>.workers.dev`.
 
-Leave the `durable_objects` binding and the `migrations` entry (`new_sqlite_classes: ["DumpDO"]`) as they are. They create the SQLite-backed Durable Object class on first deploy.
+Keep `ALLOWED_CLIENT_ORIGINS` as it is to use the hosted app. Leave the `durable_objects` binding and the `migrations` entry (`new_sqlite_classes: ["DumpDO"]`) as they are. They create the SQLite-backed Durable Object class on first deploy.
 
-### 3. Optional: enable Jev
+### 3. Set the owner key
+
+```bash
+openssl rand -base64 32
+```
+
+```bash
+npx wrangler secret put OWNER_KEY
+```
+
+Paste the generated value when prompted and keep it in your password manager. Until a key of at least 32 characters is set, the server refuses everything except `/api/ping`. Rotating it later (the same command) signs out every device; each keeps its notes and asks for the new key.
+
+### 4. Optional: enable Jev
 
 ```bash
 npx wrangler secret put JEV_API_KEY
@@ -257,28 +330,30 @@ Paste the key when prompted. It is stored as an encrypted Worker secret and neve
 npx wrangler secret delete JEV_API_KEY
 ```
 
-### 4. Deploy
+### 5. Deploy
 
 ```bash
-npx vp run deploy
+npx vp run deploy:server
 ```
 
-The `deploy` task (under `run.tasks` in `vite.config.ts`) always runs, in order:
+The `deploy:server` task (under `run.tasks` in `vite.config.ts`) runs, in order:
 
 ```mermaid
 flowchart LR
-    L[vp lint] --> T[vp test] --> C[tsc client + worker] --> B["vp build<br/>--mode production"] --> D[wrangler deploy]
+    L[vp lint] --> T[vp test] --> C[tsc client + worker] --> D[wrangler deploy]
 ```
 
-If any step fails, the deploy stops. Never deploy a `--mode test` build by hand: test builds swap out Jev and use isolated storage. The deploy script always rebuilds for production.
+If any step fails, the deploy stops.
 
-### 5. Verify
+To deploy the web app as well (the hosted app's owner, or your own copy), point `wrangler.client.jsonc` at your account and domain, then run `npx vp run deploy:client`. It runs the same checks, `vp build`, and `wrangler deploy --config wrangler.client.jsonc`. When a change touches the API contract, deploy the server first, then the app.
+
+### 6. Verify
 
 ```bash
-curl https://dump.example.com/api/ping
+curl -H 'Origin: https://dump.abishrestha.com.np' https://dump.example.com/api/ping
 ```
 
-The expected response is `{"ok":true,"mode":"cloud","classify":true}`, with `classify` set to `false` when no key is configured. Then check the following:
+Without an allowed `Origin`, the server answers 403. The response identifies `app: "dump"`, a persistent `instanceId`, `syncProtocol: "tinybase-ws"`, `auth: "owner-key"` (`"unconfigured"` until step 3), `mode: "cloud"`, and `classify: true` (or `false` when no key is configured). Then open https://dump.abishrestha.com.np, choose **Get started**, connect your server with its owner key, and check the following:
 
 - Capture on your phone and confirm it appears on your desktop without a reload.
 - Turn on airplane mode, capture, reload (the dump is still there), reconnect (it syncs).
@@ -289,9 +364,11 @@ After a deploy, reload open clients and installed PWAs through the update notice
 
 ### Security model
 
-The deployment has no application authentication. Anyone with the URL can read, edit, and delete your dumps, and can call `/api/classify`, which spends your Jev key. That route has only a coarse per-isolate limit of 60 requests a minute. The Worker rejects cross-origin API requests and requires an `Origin` on POSTs. It also sets `nosniff`, `no-referrer`, and `X-Frame-Options: DENY`.
+Everything except `/api/ping` needs your server's owner key. HTTP requests send it as `Authorization: Bearer`, and the server compares it in constant time. Browsers cannot set headers on a WebSocket, so the app first calls `POST /api/sync-ticket` for a ticket: the expiry plus an HMAC of it and the notebook ID, signed with the key and valid for 60 seconds. The key itself never appears in a URL or log. Tickets are stateless, so one can be replayed until it expires. `/api/classify` also needs the key and keeps a per-isolate limit of 60 requests a minute. A server without a key of at least 32 characters refuses access.
 
-If you need privacy, put the hostname behind [Cloudflare Access](https://developers.cloudflare.com/cloudflare-one/applications/configure-apps/self-hosted-apps/) (Zero Trust, free for small teams). It adds a login at the edge without any code changes.
+Each device stores the key in the web app's local storage, next to that notebook. The web app's host sends a Content-Security-Policy (`public/_headers`) that runs only the app's own scripts, which limits what injected code could do with it. To cut off a lost device, rotate the key; your other devices ask for the new one and keep their notes. Anyone who controls the hosted app's code, or your Cloudflare account, can still reach your notebook; host the app yourself if you want to remove the first.
+
+The Worker also answers only origins listed in `ALLOWED_CLIENT_ORIGINS`, for HTTP and WebSocket upgrades, and refuses requests without `Origin`. That is browser policy, not authentication. It sets `nosniff`, `no-referrer`, and `X-Frame-Options: DENY`.
 
 ## Checks and tests
 
@@ -299,7 +376,7 @@ If you need privacy, put the hostname behind [Cloudflare Access](https://develop
 npm run check
 ```
 
-`check` runs the format check, lint, unit tests, type checks, and a production build.
+`check` runs the format check, lint, unit tests, type checks, and both builds (the client, and a dry run of the Worker bundle).
 
 ```bash
 npx playwright install chromium
@@ -309,7 +386,7 @@ npx playwright install chromium
 npm run test:e2e
 ```
 
-The e2e suite builds a local-only test build on port 6192 with isolated `.wrangler/test-state` storage. Its tests stand in for `/api/classify` instead of calling Jev.
+The e2e suite runs two local-only API servers with `wrangler dev` (6192 and 6193, isolated `.wrangler/test-state` and `.wrangler/test-state-peer`, env and owner key from `tests/e2e/server.env`) plus the built web client (6194), served by `wrangler dev` with its production headers. A setup project onboards once through the landing page; the other tests reuse that saved notebook, and the connection tests start as new visitors. It covers the landing page at `/` without a redirect, onboarding, a wrong key, device-only notebooks joining a server later, switching, database/tab isolation, identity replacement, signing out and back in, the CSP, offline capture, live sync, owner-key checks on HTTP and WebSocket, and origin policy. E2e servers never call Jev; classification tests stand in for `/api/classify`. Unit tests cover client lifecycle, device-only and signed-out states, cancelled AI responses, failed saves, owner keys and tickets, and validation without module mocks.
 
 Tooling is [Vite+](https://viteplus.dev): Vite, Vitest, Oxlint, and Oxfmt are all configured in `vite.config.ts`.
 
@@ -325,6 +402,6 @@ These are true today:
 - Import is additive: it restores missing IDs and never rewinds existing records, so it is not a full disaster-recovery tool.
 - There is no schema versioning yet (the app hasn't reached a stable release), so formats change in place.
 
-Not built yet: list reordering UI, card drag/manual order, list archiving, AI tagging, durable server-side AI jobs, scheduled digest, email capture, R2 backup/restore, link unfurling, advanced gestures, native share extension, and physical-phone validation.
+Not built yet: list reordering UI, card drag/manual order, list archiving, AI tagging, durable server-side AI jobs, scheduled digest, email capture, R2 backup/restore, link unfurling, advanced gestures, native share extension, Raycast/Android clients, and physical-phone validation.
 
 Coding assistants should read [AGENTS.md](AGENTS.md).

@@ -1,0 +1,15 @@
+// The hosted web app for every user: static files only, no Worker script. Each user connects it
+// to their own server. Build with `npm run build:client`.
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "dump-app",
+  "account_id": "9ec33c0e13474b34877b41fcad911a1a",
+  "compatibility_date": "2026-09-20",
+  "workers_dev": false,
+  "preview_urls": false,
+  "routes": [{ "pattern": "dump.abishrestha.com.np", "custom_domain": true }],
+  "assets": {
+    "directory": "dist/client",
+    "not_found_handling": "single-page-application",
+  },
+}
