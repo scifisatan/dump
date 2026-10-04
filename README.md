@@ -94,9 +94,9 @@ Choose **Just this device** during setup to skip the server. The notebook lives 
 
 Each saved connection has its own local database (`dump-v1-<profile-id>`) and BroadcastChannel. Connection settings live in this browser under `dump-connections`.
 
-Switching flushes local writes, stops the previous client's synchronization and AI work, then reloads the app into the selected notebook. A failed local save prevents switching. Other tabs keep their existing connection until reloaded. Unsubmitted composer text is not transferred. Opening a saved connection works offline; sync resumes when available. Use export/additive import to deliberately move data between notebooks.
+Switching saves local writes, then reloads the app into the selected notebook; if the save fails, it doesn't switch. Other tabs keep their existing connection until reloaded, and unsubmitted composer text is not carried over. Saved connections open offline and sync when the server is reachable. Nothing moves between notebooks on its own: use export and import.
 
-`/api/ping` exposes a persistent namespace-scoped Durable Object ID and capabilities. Clients validate the response and pin that identity before syncing. WebSocket upgrades include the expected identity, which the server checks again. Replacing a server at the same address does not upload the old notebook into it: connect again in Settings to create a separate local profile. Renaming a server URL also creates a separate local profile; it is not an automatic migration.
+Each server has a permanent identity that the app remembers. If a different server appears at the same address, or a server moves to a new address, the app keeps the old notebook to itself: connect again in Settings to create a separate notebook.
 
 The [Mac app](#mac-app) reuses the TypeScript client core through its platform adapter contract; Raycast and Android clients could do the same but are not planned soon. Cloudflare is the supported server implementation; VPS/Docker hosting needs a separate adapter.
 
@@ -241,19 +241,22 @@ src/
 │   ├── schema.ts      Zod codecs for dumps, lists, backups; TinyBase table schema
 │   ├── merge.ts       store factory, readRows (validated decode), sync tuning
 │   ├── classify.ts    Jev request/response mapping, threshold
-│   └── api.ts         typed API contract and validated server capabilities
+│   └── api.ts         response schemas for /api/ping and /api/sync-ticket
 ├── core/              reusable client logic, no React/browser/Worker dependencies
 │   ├── client.ts      notebook instance, commands, AI queue, start/stop lifecycle
 │   ├── connection.ts  server URL validation, identity checks, storage names
 │   ├── server-link.ts one server over fetch + WebSocket (browser and Mac)
 │   └── classify.ts    stateless classification HTTP client
 ├── client/            React app
-│   ├── store.ts       React subscription and browser export adapter
+│   ├── main.tsx       entry: picks notebook or landing page, lazy-loads it
+│   ├── store.ts       the active notebook's client, React subscription, export
 │   ├── browser-platform.ts  IndexedDB, WebSocket, tab sync, device events
 │   ├── profiles.ts    saved notebooks (server or device only) and owner keys
 │   ├── registry.ts    has this browser a notebook? decides what / shows
-│   ├── App.tsx        notebook shell
+│   ├── boot.ts        holds the loading screen until the notebook is ready
+│   ├── App.tsx        notebook shell: sidebar, views, composer
 │   ├── Marketing.tsx  lazy landing page with onboarding
+│   ├── lib/           viewport.ts (phone keyboard), utils.ts
 │   └── components/    cards, search, onboarding, server settings; ui/ = shadcn/Radix
 └── server/            Cloudflare Worker, API only
     ├── index.ts       Hono routes, origin checks, owner-key checks, security headers, Jev proxy
@@ -264,10 +267,12 @@ src/
 mac/                   menu bar app (Swift); see Mac app
 ├── engine/            src/core + TinyBase bundled for JavaScriptCore, with web API polyfills
 ├── Sources/DumpKit/   runs the engine: native timers, HTTP, WebSocket, files, Keychain, profiles
-├── Sources/Dump/      AppKit/SwiftUI shell: hotkey, capture panel, settings, menu bar
+├── Sources/Dump/      AppKit/SwiftUI shell: hotkey, capture panel, notebook window, settings, menu bar
 ├── Sources/dump-check/  headless sync check against a running server
 └── scripts/           build-app.sh (build, sign, --install) and the icon renderer
 tests/                 Vitest unit tests + Playwright e2e
+public/                _headers (CSP), theme-init.js, icons
+docs/                  notes for coding agents, one per area (see AGENTS.md)
 wrangler.jsonc         API server deploy config
 wrangler.client.jsonc  web client deploy config (static assets only)
 ```
@@ -433,14 +438,14 @@ npx playwright install chromium
 npm run test:e2e
 ```
 
-The e2e suite runs two local-only API servers with `wrangler dev` (6192 and 6193, isolated `.wrangler/test-state` and `.wrangler/test-state-peer`, env and owner key from `tests/e2e/server.env`) plus the built web client (6194), served by `wrangler dev` with its production headers. A setup project onboards once through the landing page; the other tests reuse that saved notebook, and the connection tests start as new visitors. It covers the landing page at `/` without a redirect, onboarding, a wrong key, device-only notebooks joining a server later, switching, database/tab isolation, identity replacement, signing out and back in, the CSP, offline capture, live sync, owner-key checks on HTTP and WebSocket, and origin policy. E2e servers never call Jev; classification tests stand in for `/api/classify`. Unit tests cover client lifecycle, device-only and signed-out states, cancelled AI responses, failed saves, owner keys and tickets, and validation without module mocks.
+The e2e suite runs two local API servers and the built web client with its production headers, all on local ports, and never calls Jev. [docs/testing.md](docs/testing.md) describes the setup.
 
 Tooling is [Vite+](https://viteplus.dev): Vite, Vitest, Oxlint, and Oxfmt are all configured in `vite.config.ts`.
 
-The Mac app has its own tests (engine lifecycle, offline capture and reload, `!list` parsing, dump and list actions, UTF-8 hashing parity, URL normalization, timers, error messages):
+The Mac app has its own build and tests:
 
 ```bash
-cd mac && swift test
+npm run mac:engine && (cd mac && swift build && swift test)
 ```
 
 Other scripts: `npm run format` (`vp fmt`), `npm run lint` (`vp lint` + React Doctor), `npm test` (`vp test`), `npm run typegen` (regenerate Worker binding types).
@@ -457,4 +462,4 @@ These are true today:
 
 Not built yet: list reordering UI, card drag/manual order, list archiving, AI tagging, durable server-side AI jobs, scheduled digest, email capture, R2 backup/restore, link unfurling, advanced gestures, native share extension, Raycast/Android clients, and physical-phone validation.
 
-Coding assistants should read [AGENTS.md](AGENTS.md).
+Coding agents start at [AGENTS.md](AGENTS.md). It maps each area to its notes in `docs/`, and review rules are in [CODING_STANDARDS.md](CODING_STANDARDS.md).
