@@ -27,12 +27,13 @@ Each fact has one owning doc. Read the owning doc before changing its paths.
 | Mac app: engine, polyfills, Swift shell, build, checks | `mac/` | [docs/mac.md](docs/mac.md) |
 | Unit and e2e test setup, debugging failures | `tests/`, `playwright.config.ts` | [docs/testing.md](docs/testing.md) |
 | Deploy, versions, tags, GitHub releases | `run.tasks` in `vite.config.ts`, `mac/Info.plist` | [docs/release.md](docs/release.md) |
-| Usage, architecture diagrams, code map, decisions, deploy guide, roadmap | for humans | [README.md](README.md) |
+| How it fits together: diagrams, code map, decisions, why Jev | | [docs/architecture.md](docs/architecture.md) |
+| Usage, Mac install, deploy guide, security summary, limitations | for humans | [README.md](README.md) |
 | Rules a reviewer enforces on a diff | | [CODING_STANDARDS.md](CODING_STANDARDS.md) |
 
 ## Keeping docs true
 
-- Make each doc update in the same change as the code. If a change alters a rule, command, gotcha or behavior that an owning doc describes, update that doc. If it changes what a user sees, how setup works or how deploys work, update README. If it adds, removes or renames a file under `src/` or `mac/`, update README's Code map.
+- Make each doc update in the same change as the code. If a change alters a rule, command, gotcha or behavior that an owning doc describes, update that doc. If it changes what a user sees, how setup works or how deploys work, update README. If it adds, removes or renames a file under `src/` or `mac/`, update the code map in `docs/architecture.md`.
 - State each fact once, in its owning doc. Anywhere else, link to it.
 - A new rule needs a test, and the doc line names that test. If no test can check the rule, the line says so.
 - When something stops being true, delete it. Docs describe the present; history belongs in git.

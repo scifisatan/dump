@@ -34,7 +34,7 @@ These match "Keeping docs true" in AGENTS.md.
 
 - For each changed path, find the row in AGENTS.md's docs map that owns it. If the diff changes a rule, command, gotcha or behavior that the owning doc (or README) describes, and that doc isn't updated in the same diff, it's a finding.
 - A doc line the diff makes false is a finding, wherever it is.
-- A file under `src/` or `mac/` that is added, removed or renamed without a matching README Code map update is a finding.
+- A file under `src/` or `mac/` that is added, removed or renamed without a matching update to the code map in `docs/architecture.md` is a finding.
 - A fact restated in a second file, instead of linked to its owning doc, is a finding.
 - A new rule in a doc needs a test named next to it, or a note that no test can check it.
 - History words in docs ("now", "former", "first pass", "no longer") are a finding: the line should state the present.

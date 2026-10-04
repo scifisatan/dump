@@ -1,6 +1,6 @@
 # Core: data, sync, commands, filing, connections
 
-Owns `src/shared/` and `src/core/`. These are the platform-independent parts that the web client, the Worker and the Mac app share. For the diagrams and the reasoning behind these choices, read README § Architecture and § Why these decisions.
+Owns `src/shared/` and `src/core/`. These are the platform-independent parts that the web client, the Worker and the Mac app share. For the diagrams and the reasoning behind these choices, read [architecture.md](architecture.md).
 
 ## Layout
 
@@ -49,7 +49,7 @@ The notebook changes only through the commands `createDumpClient` returns: `capt
 - Unfiled open dumps are the durable queue: failed requests and closed tabs are retried on the next load or reconnect, with at most three requests at a time. New captures go ahead of a backlog sweep.
 - If the owner files, completes or removes a dump while Jev is still answering, the owner's change wins. → e2e `app.spec.ts` "filing by hand beats a late answer"
 - Server-side AI work would need durable retry state; `waitUntil` alone is not enough.
-- `CLASSIFY_THRESHOLD` is 0.4. Retune it against a labelled set of real dumps rather than guessing (README § Why Jev).
+- `CLASSIFY_THRESHOLD` is 0.4. Retune it against a labelled set of real dumps rather than guessing ([architecture.md § Why Jev](architecture.md#why-jev)).
 
 ## Connections and profiles
 
