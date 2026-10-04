@@ -1,6 +1,6 @@
 import { Hono } from 'hono';
 import { createMiddleware } from 'hono/factory';
-import { jevKey, type Env } from './env';
+import type { Env } from './env';
 import { pingSchema } from '../shared/api';
 import { bearer, createTicket, matchesKey, ownerKey, verifyTicket } from './auth';
 import { classifyRequestSchema, jevRequest, readJevResponse } from '../shared/classify';
@@ -56,11 +56,11 @@ const requireOwner = createMiddleware<{ Bindings: Env; Variables: { ownerKey: st
   },
 );
 
-const routes = app
+app
   .get('/api/ping', (c) => {
     const hostname = new URL(c.req.url).hostname;
     const mode = ['localhost', '127.0.0.1', '[::1]'].includes(hostname) ? 'local' : 'cloud';
-    const classify = !!jevKey(c.env);
+    const classify = !!c.env.JEV_API_KEY;
     // The namespace-scoped object ID is stable without waking the sync server before a
     // WebSocket exists (which would leave its initial peer handshake waiting for a timeout).
     const instanceId = c.env.DUMP.idFromName('me').toString();
@@ -82,7 +82,7 @@ const routes = app
   })
   // Stateless proxy to Jev: the browser cannot call it directly (CORS) or hold the key.
   .post('/api/classify', requireOwner, async (c) => {
-    const key = jevKey(c.env);
+    const key = c.env.JEV_API_KEY;
     if (!key) return c.json({ error: 'Classification is off.' }, 503);
     if (!classifyAllowed()) return c.json({ error: 'Too many requests.' }, 429);
     const parsed = classifyRequestSchema.safeParse(await c.req.json().catch(() => null));
@@ -123,5 +123,4 @@ app.onError((error, c) => {
   return c.json({ error: 'Unable to complete the request. Your local data is safe.' }, 500);
 });
 
-export type AppType = typeof routes;
 export default app;

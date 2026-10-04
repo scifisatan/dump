@@ -213,7 +213,7 @@ private struct ServerConnection: View {
     Task {
       defer { busy = false }
       do {
-        checked = try await model.inspect(address)
+        checked = try await model.engine.inspect(address)
       } catch {
         self.error = error.localizedDescription
       }

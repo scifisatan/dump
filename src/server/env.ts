@@ -9,5 +9,3 @@ export interface Env {
   // The owner's secret (a Worker secret; `.env.local` or the dev task locally). See auth.ts.
   OWNER_KEY?: string;
 }
-
-export const jevKey = (env: Env) => env.JEV_API_KEY || undefined;

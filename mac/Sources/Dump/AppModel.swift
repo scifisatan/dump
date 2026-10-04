@@ -17,6 +17,13 @@ final class AppModel {
   /// The list chosen in the panel; nil leaves filing to the `!list` prefix or Jev.
   var chosenList: String?
   var captureError: String?
+  /// A failed action in the notebook window, shown as an alert.
+  var actionError: String?
+
+  /// While the notebook window is open, snapshots carry every dump, not only the latest.
+  var notebookOpen = false {
+    didSet { if notebookOpen != oldValue { refresh() } }
+  }
 
   var shortcut: Shortcut {
     didSet {
@@ -31,6 +38,7 @@ final class AppModel {
   var registerShortcut: ((Shortcut) -> Bool)?
   var pauseShortcut: ((Bool) -> Void)?
   var showPanel: (() -> Void)?
+  var showNotebook: (() -> Void)?
   /// Overrides the Origin header sent to servers; nil uses ClientOrigin.standard.
   var webAppOrigin: String? {
     didSet { defaults.set(webAppOrigin, forKey: Keys.origin) }
@@ -82,7 +90,7 @@ final class AppModel {
   }
 
   private func refresh() {
-    snapshot = engine.snapshot() ?? .closed
+    snapshot = engine.snapshot(full: notebookOpen) ?? .closed
     if let chosen = chosenList, snapshot.list(chosen) == nil { chosenList = nil }
   }
 
@@ -121,13 +129,32 @@ final class AppModel {
     }
   }
 
+  // MARK: Dumps and lists, as in the web app. Every change is final; there is no undo.
+
+  func setDone(_ ids: some Sequence<String>, _ done: Bool) {
+    perform { for id in ids { try engine.setDone(id, done) } }
+  }
+
+  /// Files dumps by hand; nil returns them to the inbox.
+  func file(_ ids: some Sequence<String>, to list: String?) {
+    perform { for id in ids { try engine.file(id, list: list) } }
+  }
+
+  func remove(_ ids: some Sequence<String>) {
+    perform { for id in ids { try engine.remove(id) } }
+  }
+
+  func clearDone() {
+    perform { try engine.clearDone() }
+  }
+
+  private func perform(_ work: () throws -> Void) {
+    do { try work() } catch { actionError = error.localizedDescription }
+  }
+
   // MARK: Servers
 
   var server: ServerLocation? { profile?.server }
-
-  func inspect(_ address: String) async throws -> ServerCheck {
-    try await engine.inspect(address)
-  }
 
   /// A notebook on this Mac joins the server's (its notes are added there). A synced one switches
   /// to that server's own notebook, reusing a saved one for it.

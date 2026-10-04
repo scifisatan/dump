@@ -1,9 +1,9 @@
 import { useState } from 'react';
 import { LoaderCircle } from 'lucide-react';
 import { toast } from 'sonner';
-import { requestTicket, type ServerLocation } from '../../core/connection';
+import { explainConnectionError, requestTicket, type ServerLocation } from '../../core/connection';
 import { activateProfile, profileForServer, readProfiles, saveKey } from '../profiles';
-import { client, currentProfile, reconnect } from '../store';
+import { client, currentProfile } from '../store';
 import { ServerConnection } from './ServerConnection';
 import { Button } from './ui/button';
 import { Input } from './ui/input';
@@ -25,10 +25,10 @@ function SignIn({ server }: { server: ServerLocation }) {
         try {
           await requestTicket(server.baseUrl, key);
           saveKey(currentProfile.id, key);
-          reconnect();
+          client.reconnect();
           toast('Signed in. Syncing again.');
         } catch (cause) {
-          setError(cause instanceof Error ? cause.message : 'Could not sign in.');
+          setError(explainConnectionError(cause, 'Could not sign in.'));
         } finally {
           setBusy(false);
         }

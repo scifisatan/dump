@@ -1,8 +1,13 @@
+import { createServer } from 'node:http';
 import { describe, expect, it } from 'vite-plus/test';
 import {
   channelName,
+  ConnectionError,
   databaseName,
+  explainConnectionError,
+  inspectServer,
   readServerInfo,
+  requestTicket,
   serverUrl,
   syncUrl,
 } from '../src/core/connection';
@@ -62,5 +67,27 @@ describe('personal server connections', () => {
     expect(allowsOrigin(client, `${client}/path`)).toBe(false);
     expect(allowsOrigin(`${client}.evil.com`, client)).toBe(false);
     expect(allowsOrigin('http://example.com', 'http://example.com')).toBe(false);
+  });
+  it('explains connection failures the same way on every client', async () => {
+    expect(explainConnectionError(new TypeError('Failed to fetch'), 'Fallback.')).toMatch(
+      /^Could not reach this server\..*ALLOWED_CLIENT_ORIGINS/,
+    );
+    expect(explainConnectionError(new ConnectionError('Wrong key.'), 'Fallback.')).toBe(
+      'Wrong key.',
+    );
+    expect(explainConnectionError('unknown', 'Fallback.')).toBe('Fallback.');
+    // A native client reads a refused origin's 403 that a browser cannot.
+    const server = createServer((_request, response) => response.writeHead(403).end());
+    await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve));
+    try {
+      const address = server.address();
+      if (!address || typeof address === 'string') throw new Error('The test server has no port.');
+      const baseUrl = `http://127.0.0.1:${address.port}`;
+      const refused = 'does not allow the web app address this app presents';
+      await expect(inspectServer(baseUrl)).rejects.toThrow(refused);
+      await expect(requestTicket(baseUrl, 'key')).rejects.toThrow(refused);
+    } finally {
+      await new Promise((resolve) => server.close(resolve));
+    }
   });
 });

@@ -4,13 +4,13 @@
 import './polyfills';
 import { createDumpClient, type Snapshot } from '../../src/core/client';
 import {
-  ConnectionError,
+  explainConnectionError,
   inspectServer,
   profileSchema,
   requestTicket,
   serverUrl,
 } from '../../src/core/connection';
-import { dumpSchema, listPrefix } from '../../src/shared/schema';
+import { listPrefix, listSchema, type Dump } from '../../src/shared/schema';
 import { native } from './native';
 import { deviceEvents, macPlatform } from './platform';
 
@@ -19,11 +19,25 @@ let client: Client | undefined;
 let unsubscribe = () => {};
 
 const RECENT = 6;
-const TEXT_LIMIT = dumpSchema.shape.text.maxLength ?? 20_000;
 
-// What the panel and menu show: a compact view of the snapshot, not the whole notebook.
-function view(snapshot: Snapshot) {
-  const open = snapshot.dumps.filter((dump) => !dump.deleted && !dump.done);
+// One dump as the Mac app shows it.
+function item(dump: Dump, snapshot: Snapshot) {
+  return {
+    id: dump.id,
+    text: dump.text,
+    list: dump.list,
+    tags: dump.tags,
+    done: dump.done,
+    url: dump.url,
+    createdAt: dump.created_at,
+    sorting: snapshot.sorting.has(dump.id),
+  };
+}
+
+// What the panel and menu show: a compact view of the snapshot. `full` adds every dump, for the
+// notebook window, which is not worth encoding on each change while the window is closed.
+function view(snapshot: Snapshot, full: boolean) {
+  const active = snapshot.dumps.filter((dump) => !dump.deleted);
   return {
     ready: snapshot.ready,
     sync: snapshot.sync,
@@ -33,35 +47,15 @@ function view(snapshot: Snapshot) {
     lists: snapshot.lists
       .filter((list) => !list.deleted)
       .map(({ id, label, color }) => ({ id, label, color })),
-    recent: snapshot.dumps
-      .filter((dump) => !dump.deleted)
-      .slice(0, RECENT)
-      .map((dump) => ({
-        id: dump.id,
-        text: dump.text,
-        list: dump.list,
-        done: dump.done,
-        url: dump.url,
-        createdAt: dump.created_at,
-        sorting: snapshot.sorting.has(dump.id),
-      })),
-    inbox: open.filter((dump) => !dump.list).length,
+    recent: active.slice(0, RECENT).map((dump) => item(dump, snapshot)),
+    dumps: full ? active.map((dump) => item(dump, snapshot)) : [],
+    inbox: active.filter((dump) => !dump.done && !dump.list).length,
   };
 }
 
 function current() {
   if (!client) throw new Error('No notebook is open.');
   return client;
-}
-
-// The same wording the web app uses when a server cannot be checked.
-function explain(cause: unknown, fallback: string) {
-  if (cause instanceof TypeError)
-    return 'Could not reach this server. Check the address and that it is online.';
-  // The server refuses origins it does not list before anything else (src/server/origins.ts).
-  if (cause instanceof ConnectionError && cause.message.includes('(403)'))
-    return 'This server does not allow the Mac app’s web app address. Add it to ALLOWED_CLIENT_ORIGINS on the server, or change it under Advanced.';
-  return cause instanceof Error ? cause.message : fallback;
 }
 
 const engine = {
@@ -84,8 +78,8 @@ const engine = {
     client = undefined;
   },
 
-  snapshot() {
-    return JSON.stringify(client ? view(client.getSnapshot()) : null);
+  snapshot(full: boolean) {
+    return JSON.stringify(client ? view(client.getSnapshot(), full) : null);
   },
 
   // The list an explicit `!list` prefix in this draft files to, if any.
@@ -96,12 +90,36 @@ const engine = {
   // Captures synchronously, like the web composer. `list` files it when the text has no prefix
   // of its own; otherwise Jev sorts it afterwards when the server has it.
   capture(text: string, list: string | null) {
-    const notebook = current();
-    if (text.trim().length > TEXT_LIMIT)
-      throw new Error(`A dump can be up to ${TEXT_LIMIT.toLocaleString('en-US')} characters.`);
-    const prefixed = listPrefix(text, notebook.getSnapshot().lists);
-    const dump = notebook.capture(list && !prefixed ? `!${list} ${text}` : text);
+    const dump = current().capture(text, list);
     return JSON.stringify({ id: dump.id, list: dump.list });
+  },
+
+  // The core's dump actions (src/core/client.ts). All are final; there is no undo.
+  setDone(id: string, done: boolean) {
+    current().setDone(id, done);
+  },
+
+  file(id: string, list: string | null) {
+    current().file(id, list);
+  },
+
+  remove(id: string) {
+    current().remove(id);
+  },
+
+  // Creates a list, or renames and recolors one when `id` is given.
+  saveList(label: string, color: string, id: string | null) {
+    const list = current().saveList(label, color, id ?? undefined);
+    return JSON.stringify({ id: list.id, label: list.label, color: list.color });
+  },
+
+  // Tombstones the list; its dumps return to the inbox for Jev or the owner to sort again.
+  deleteList(id: string) {
+    current().deleteList(listSchema.parse(id));
+  },
+
+  clearDone() {
+    return current().clearDone();
   },
 
   reconnect() {
@@ -133,7 +151,7 @@ const engine = {
         classify: info.classify,
       });
     } catch (cause) {
-      throw new Error(explain(cause, 'Could not check this server.'), { cause });
+      throw new Error(explainConnectionError(cause, 'Could not check this server.'), { cause });
     }
   },
 
@@ -141,7 +159,9 @@ const engine = {
     try {
       await requestTicket(baseUrl, key);
     } catch (cause) {
-      throw new Error(explain(cause, 'Could not connect to this server.'), { cause });
+      throw new Error(explainConnectionError(cause, 'Could not connect to this server.'), {
+        cause,
+      });
     }
   },
 };

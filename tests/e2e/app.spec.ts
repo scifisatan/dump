@@ -267,9 +267,8 @@ test('custom lists, filing and renaming sync and survive reload', async ({ brows
   await expect(a.getByRole('heading', { level: 1 })).toHaveText(new RegExp(name));
   await expect(a.getByRole('heading', { name: 'Room for something good.' })).toBeVisible();
   await a.screenshot({ path: 'test-results/empty-list-desktop.png' });
-  await a
-    .getByRole('textbox', { name: 'Capture a thought' })
-    .fill(`!${name.toLowerCase()} ${thought}`);
+  // A list's composer files into that list without a `!list` prefix.
+  await a.getByRole('textbox', { name: 'Capture a thought' }).fill(thought);
   await a.getByRole('button', { name: 'Save dump', exact: true }).click();
   await expect(a.getByRole('article').getByText(thought, { exact: true })).toBeVisible();
   // The composer moves from the centered empty state to the bottom and keeps focus.

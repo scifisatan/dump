@@ -63,6 +63,7 @@ public struct Snapshot: Codable, Equatable, Sendable {
     public var id: String
     public var text: String
     public var list: String?
+    public var tags: [String]
     public var done: Bool
     public var url: String?
     public var createdAt: Double
@@ -78,11 +79,14 @@ public struct Snapshot: Codable, Equatable, Sendable {
   public var storageError: String?
   public var lists: [List]
   public var recent: [Item]
+  /// Every dump, newest first; only in a full snapshot (`Engine.snapshot(full:)`).
+  public var dumps: [Item]
+  /// Open dumps not filed in a list.
   public var inbox: Int
 
   public static let closed = Snapshot(
     ready: false, sync: .local, syncError: nil, saving: false, storageError: nil, lists: [],
-    recent: [], inbox: 0)
+    recent: [], dumps: [], inbox: 0)
 
   public func list(_ id: String?) -> List? { lists.first { $0.id == id } }
 }

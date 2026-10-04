@@ -11,17 +11,6 @@ export const client = createDumpClient(browserPlatform(profile));
 // otherwise clears site data after seven days without a visit unless the app is installed.
 if (!profile.server) void navigator.storage?.persist?.().catch(() => false);
 export const useDumpStore = () => useSyncExternalStore(client.subscribe, client.getSnapshot);
-export const initializeStore = client.start;
-export const {
-  capture,
-  updateDump,
-  saveList,
-  deleteList,
-  clearDone,
-  importDumps,
-  syncNow,
-  reconnect,
-} = client;
 
 export function exportDumps() {
   const blob = new Blob([JSON.stringify(client.backup(), null, 2)], { type: 'application/json' });

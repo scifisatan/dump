@@ -8,6 +8,7 @@ struct CaptureView: View {
   var onSubmit: () -> Void
   var onCancel: () -> Void
   var onSettings: () -> Void
+  var onNotebook: () -> Void
   var onSize: (CGSize) -> Void
 
   static let width: CGFloat = 640
@@ -48,7 +49,7 @@ struct CaptureView: View {
 
       if !model.snapshot.recent.isEmpty {
         Divider().opacity(0.6)
-        Recent(items: Array(model.snapshot.recent.prefix(5)), snapshot: model.snapshot)
+        Recent(items: Array(model.snapshot.recent.prefix(5)), snapshot: model.snapshot, onNotebook: onNotebook)
       }
 
       Divider().opacity(0.6)
@@ -130,14 +131,33 @@ private struct Chip: View {
 private struct Recent: View {
   let items: [Snapshot.Item]
   let snapshot: Snapshot
+  let onNotebook: () -> Void
 
   var body: some View {
     VStack(alignment: .leading, spacing: 2) {
-      Text("Recent")
-        .font(.system(size: 11, weight: .semibold))
-        .foregroundStyle(.tertiary)
-        .padding(.horizontal, 20)
-        .padding(.bottom, 4)
+      HStack {
+        Text("Recent")
+          .font(.system(size: 11, weight: .semibold))
+          .foregroundStyle(.tertiary)
+        Spacer()
+        Button(action: onNotebook) {
+          HStack(spacing: 5) {
+            Text("Open Notebook")
+            Text("⌘O")
+              .font(.system(size: 10.5, weight: .medium, design: .rounded))
+              .padding(.horizontal, 5)
+              .padding(.vertical, 1.5)
+              .background(RoundedRectangle(cornerRadius: 4).fill(Color.primary.opacity(0.08)))
+          }
+          .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .font(.system(size: 11.5))
+        .foregroundStyle(.secondary)
+        .help("See, search and sort everything you’ve dumped")
+      }
+      .padding(.horizontal, 20)
+      .padding(.bottom, 4)
       ForEach(items) { item in
         let list = snapshot.list(item.list)
         HStack(spacing: 10) {
