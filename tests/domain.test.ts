@@ -30,6 +30,21 @@ describe('capture parser', () => {
     expect(dump.tags).toEqual(['later']);
     expect(dump.url).toBe('https://example.com/page#section');
   });
+  it('files into the chosen list unless a prefix names another or the list is gone', () => {
+    const make = (raw: string, chosen: string) =>
+      makeDump(raw, crypto.randomUUID(), 100, DEFAULT_LISTS, chosen);
+    expect(make('warm floor lamp', 'decor')).toMatchObject({
+      list: 'decor',
+      text: 'warm floor lamp',
+      classified_by: 'user',
+    });
+    expect(make('!buy warm floor lamp', 'decor').list).toBe('buy');
+    const lists = DEFAULT_LISTS.map((list) => ({ ...list, deleted: list.id === 'decor' }));
+    expect(makeDump('warm floor lamp', crypto.randomUUID(), 100, lists, 'decor')).toMatchObject({
+      list: null,
+      classified_by: null,
+    });
+  });
   it('rejects empty and overly long captures', () => {
     expect(() => makeDump('  ')).toThrow();
     expect(() => makeDump('!buy ')).toThrow();

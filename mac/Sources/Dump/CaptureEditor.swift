@@ -2,22 +2,24 @@ import AppKit
 import Carbon.HIToolbox
 import SwiftUI
 
-/// The panel's text box: grows with its text up to a few lines, then scrolls. Return saves,
-/// Shift- or Option-Return adds a line, Tab moves through lists, ⌘0–⌘9 pick one, Escape closes.
+/// A capture text box, in the panel and the notebook window: grows with its text up to a few
+/// lines, then scrolls. Return saves, Shift- or Option-Return adds a line, Escape cancels. In the
+/// panel, Tab moves through lists and ⌘0–⌘9 pick one; without those handlers Tab moves focus.
 struct CaptureEditor: NSViewRepresentable {
   @Binding var text: String
+  var font = CaptureEditor.font
+  var maxLines: CGFloat = 8
   var onSubmit: () -> Void
-  var onCancel: () -> Void
-  var onCycle: (Int) -> Void
-  var onPick: (Int) -> Void
+  var onCancel: () -> Void = {}
+  var onCycle: ((Int) -> Void)?
+  var onPick: ((Int) -> Void)?
 
   static let font = NSFont.systemFont(ofSize: 20, weight: .regular)
-  static let maxLines: CGFloat = 8
 
   func makeNSView(context: Context) -> NSScrollView {
     let textView = EditorTextView(usingTextLayoutManager: false)
     textView.delegate = context.coordinator
-    textView.font = Self.font
+    textView.font = font
     textView.textColor = .labelColor
     textView.insertionPointColor = .controlAccentColor
     textView.drawsBackground = false
@@ -45,7 +47,8 @@ struct CaptureEditor: NSViewRepresentable {
   func updateNSView(_ scrollView: NSScrollView, context: Context) {
     context.coordinator.parent = self
     guard let textView = scrollView.documentView as? EditorTextView else { return }
-    textView.handlers = (onSubmit, onCancel, onCycle, onPick)
+    textView.handlers = EditorTextView.Handlers(
+      submit: onSubmit, cancel: onCancel, cycle: onCycle, pick: onPick)
     if textView.string != text { textView.string = text }
   }
 
@@ -56,8 +59,8 @@ struct CaptureEditor: NSViewRepresentable {
     let width = proposal.width ?? 560
     container.containerSize = NSSize(width: width, height: .greatestFiniteMagnitude)
     layout.ensureLayout(for: container)
-    let line = layout.defaultLineHeight(for: Self.font)
-    let height = min(max(layout.usedRect(for: container).height, line), line * Self.maxLines)
+    let line = layout.defaultLineHeight(for: font)
+    let height = min(max(layout.usedRect(for: container).height, line), line * maxLines)
     return CGSize(width: width, height: ceil(height))
   }
 
@@ -75,7 +78,13 @@ struct CaptureEditor: NSViewRepresentable {
 }
 
 final class EditorTextView: NSTextView {
-  var handlers: (submit: () -> Void, cancel: () -> Void, cycle: (Int) -> Void, pick: (Int) -> Void)?
+  struct Handlers {
+    var submit: () -> Void
+    var cancel: () -> Void
+    var cycle: ((Int) -> Void)?
+    var pick: ((Int) -> Void)?
+  }
+  var handlers: Handlers?
 
   override func keyDown(with event: NSEvent) {
     // Input methods compose with Return and Tab; let them finish first.
@@ -85,7 +94,13 @@ final class EditorTextView: NSTextView {
     case kVK_Return, kVK_ANSI_KeypadEnter:
       if flags.contains(.shift) || flags.contains(.option) { insertNewline(nil) } else { handlers.submit() }
     case kVK_Tab where flags.subtracting(.shift).isEmpty:
-      handlers.cycle(flags.contains(.shift) ? -1 : 1)
+      if let cycle = handlers.cycle {
+        cycle(flags.contains(.shift) ? -1 : 1)
+      } else if flags.contains(.shift) {
+        window?.selectPreviousKeyView(nil)
+      } else {
+        window?.selectNextKeyView(nil)
+      }
     default:
       super.keyDown(with: event)
     }
@@ -93,10 +108,10 @@ final class EditorTextView: NSTextView {
 
   override func performKeyEquivalent(with event: NSEvent) -> Bool {
     let flags = event.modifierFlags.intersection([.shift, .option, .command, .control])
-    if flags == .command, let digit = event.charactersIgnoringModifiers.flatMap(Int.init),
-      (0...9).contains(digit)
+    if flags == .command, let pick = handlers?.pick,
+      let digit = event.charactersIgnoringModifiers.flatMap(Int.init), (0...9).contains(digit)
     {
-      handlers?.pick(digit)
+      pick(digit)
       return true
     }
     return super.performKeyEquivalent(with: event)

@@ -2,7 +2,7 @@ import { useRef } from 'react';
 import { ArrowDownToLine, Monitor, Moon, Sun, Upload } from 'lucide-react';
 import { useTheme } from 'next-themes';
 import { toast } from 'sonner';
-import { currentProfile, exportDumps, importDumps } from '../store';
+import { client, currentProfile, exportDumps } from '../store';
 import { ServerSettings } from './ServerSettings';
 import { Button } from './ui/button';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from './ui/dialog';
@@ -133,7 +133,7 @@ export function SettingsDialog({
             try {
               if (file.size > 8 * 1024 * 1024)
                 throw new Error('Please use a backup smaller than 8 MB.');
-              const count = importDumps(JSON.parse(await file.text()));
+              const count = client.importDumps(JSON.parse(await file.text()));
               toast(
                 `${count} ${count === 1 ? 'dump' : 'dumps'} restored. Existing items were kept.`,
               );

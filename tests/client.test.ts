@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from 'vite-plus/test';
-import type { MergeableStore } from 'tinybase';
+import type { MergeableContent } from 'tinybase';
+import { createCustomPersister, Persists } from 'tinybase/persisters';
 import { createDumpClient, type ClientPlatform } from '../src/core/client';
 import type { PingResult } from '../src/shared/api';
 import { ConnectionError, Unauthorized } from '../src/core/connection';
@@ -23,7 +24,7 @@ function deferred<T>() {
 
 // Explicit in-memory platform exercises the same core used by the browser; no module mocks.
 function platform({ deviceOnly = false } = {}) {
-  let content: ReturnType<MergeableStore['getMergeableContent']> | undefined;
+  let content: MergeableContent | undefined;
   const state = {
     connections: 0,
     destroyed: 0,
@@ -36,24 +37,22 @@ function platform({ deviceOnly = false } = {}) {
     classify: async (_signal: AbortSignal): Promise<string | null> => 'buy',
   };
   const adapter: ClientPlatform = {
-    persistence(store, status) {
-      const save = async () => {
-        if (state.failSave) {
-          status(false, 'Disk unavailable');
-          throw new Error('Disk unavailable');
-        }
-        content = store.getMergeableContent();
-        status(false, null);
-      };
-      return {
-        async load() {
-          if (content) store.setMergeableContent(content);
+    storage: (store, onError) => ({
+      persister: createCustomPersister(
+        store,
+        async () => content,
+        async (getContent) => {
+          if (state.failSave) throw new Error('Disk unavailable');
+          content = getContent();
         },
-        save,
-        async start() {},
-        async destroy() {},
-      };
-    },
+        () => 0,
+        () => {},
+        onError,
+        Persists.MergeableStoreOnly,
+      ),
+      isEmpty: async () => content === undefined,
+    }),
+    storageFailure: 'Disk unavailable',
     server: deviceOnly
       ? null
       : {
@@ -215,5 +214,88 @@ describe('client lifecycle and isolation', () => {
     await client.stop();
     expect(host.state.tabs).toBe(0);
     expect(host.state.watches).toBe(0);
+  });
+});
+
+describe('saving', () => {
+  it('a failed auto-save in flight does not fail a later save that writes everything', async () => {
+    const host = platform({ deviceOnly: true });
+    const client = createDumpClient(host.adapter);
+    await client.start();
+    host.state.failSave = true;
+    client.capture('!ideas written by the final save');
+    host.state.failSave = false;
+    await client.stop();
+    const reopened = createDumpClient(host.adapter);
+    await reopened.start();
+    expect(reopened.getSnapshot().dumps.map((dump) => dump.text)).toEqual([
+      'written by the final save',
+    ]);
+    await reopened.stop();
+  });
+});
+
+describe('dump and list actions', () => {
+  const find = (client: ReturnType<typeof createDumpClient>, id: string) =>
+    client.getSnapshot().dumps.find((dump) => dump.id === id);
+
+  it('deleting a list sends its dumps back to Jev, but one moved to the inbox by hand stays', async () => {
+    const host = platform();
+    const client = createDumpClient(host.adapter);
+    await client.start();
+    await vi.waitFor(() => expect(client.getSnapshot().sync).toBe('synced'));
+    const sorted = client.capture('ceramic kettle');
+    await vi.waitFor(() => expect(find(client, sorted.id)?.list).toBe('buy'));
+    const filed = client.capture('!buy socks');
+    const kept = client.capture('!buy tea');
+    client.file(kept.id, null);
+    host.state.classify = async () => 'ideas';
+    client.deleteList('buy');
+    await client.stop();
+    // Unfiled dumps are sorted again on the next load.
+    const reopened = createDumpClient(host.adapter);
+    await reopened.start();
+    await vi.waitFor(() => {
+      expect(find(reopened, sorted.id)).toMatchObject({ list: 'ideas', classified_by: 'ai' });
+      expect(find(reopened, filed.id)).toMatchObject({ list: 'ideas', classified_by: 'ai' });
+    });
+    expect(find(reopened, kept.id)).toMatchObject({ list: null, classified_by: 'user' });
+    await reopened.stop();
+  });
+
+  it('captures into the chosen list without asking Jev, and explains an over-long dump', async () => {
+    const host = platform();
+    const client = createDumpClient(host.adapter);
+    await client.start();
+    await vi.waitFor(() => expect(client.getSnapshot().sync).toBe('synced'));
+    const dump = client.capture('warm floor lamp', 'decor');
+    expect(dump).toMatchObject({ list: 'decor', classified_by: 'user' });
+    expect(() => client.capture('a'.repeat(20_001))).toThrow(
+      'A dump can be up to 20,000 characters.',
+    );
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    expect(host.state.calls).toBe(0);
+    await client.stop();
+  });
+
+  it('records filing by hand and refuses removed dumps and deleted lists', async () => {
+    const client = createDumpClient(platform({ deviceOnly: true }).adapter);
+    await client.start();
+    const dump = client.capture('ceramic kettle');
+    client.file(dump.id, 'buy');
+    client.setDone(dump.id, true);
+    expect(find(client, dump.id)).toMatchObject({ list: 'buy', classified_by: 'user', done: true });
+    client.deleteList('watch');
+    expect(() => client.file(dump.id, 'watch')).toThrow('That list no longer exists.');
+    client.remove(dump.id);
+    expect(find(client, dump.id)?.deleted).toBe(true);
+    for (const action of [
+      () => client.setDone(dump.id, false),
+      () => client.file(dump.id, null),
+      () => client.remove(dump.id),
+      () => client.remove(crypto.randomUUID()),
+    ])
+      expect(action).toThrow('This dump is no longer in your notebook.');
+    await client.stop();
   });
 });

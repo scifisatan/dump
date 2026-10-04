@@ -1,6 +1,6 @@
 import { useState, type FormEvent } from 'react';
 import type { Collection } from '../../shared/schema';
-import { deleteList, saveList } from '../store';
+import { client } from '../store';
 import { Button } from './ui/button';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from './ui/dialog';
 import { Input } from './ui/input';
@@ -24,7 +24,7 @@ export function ListEditor({
   function remove() {
     if (!list) return;
     try {
-      deleteList(list.id);
+      client.deleteList(list.id);
       deleted?.(list);
       close();
     } catch (error) {
@@ -34,7 +34,7 @@ export function ListEditor({
   function submit(event: FormEvent) {
     event.preventDefault();
     try {
-      saved(saveList(label, color, list?.id));
+      saved(client.saveList(label, color, list?.id));
       close();
     } catch (error) {
       setError(error instanceof Error ? error.message : 'Could not save this list.');

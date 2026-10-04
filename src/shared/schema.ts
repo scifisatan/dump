@@ -81,15 +81,19 @@ export function listPrefix(raw: string, lists: Collection[] = DEFAULT_LISTS) {
   return prefix && list ? { list: list.id, length: prefix[0].length } : null;
 }
 
+// `chosen` is the list the owner is capturing into; a `!list` prefix wins over it. A chosen list
+// that no longer exists is ignored, so the thought is still captured, unfiled.
 export function makeDump(
   raw: string,
   id = crypto.randomUUID(),
   now = Date.now(),
   lists: Collection[] = DEFAULT_LISTS,
+  chosen: ListId | null = null,
 ): Dump {
   let text = raw.trim();
   const prefix = listPrefix(text, lists);
-  const list = prefix?.list ?? null;
+  const list =
+    prefix?.list ?? lists.find((item) => item.id === chosen && !item.deleted)?.id ?? null;
   if (prefix) text = text.slice(prefix.length).trim();
   const tags = [
     ...new Set(

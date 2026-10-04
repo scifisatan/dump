@@ -42,6 +42,23 @@ export function readServerInfo(value: unknown) {
   return result.data;
 }
 
+// What the owner sees when a server cannot be checked or connected, on every client. A browser
+// cannot read a refused origin (the 403 carries no CORS headers), so it fails like an unreachable
+// server and that message names both causes.
+export function explainConnectionError(cause: unknown, fallback: string) {
+  if (cause instanceof TypeError)
+    return 'Could not reach this server. Check the address, that it is online, and that its ALLOWED_CLIENT_ORIGINS lists this app.';
+  return cause instanceof Error ? cause.message : fallback;
+}
+
+// Only native clients read a refused origin's 403; see explainConnectionError for browsers.
+const failed = (status: number) =>
+  new ConnectionError(
+    status === 403
+      ? 'This server does not allow the web app address this app presents. Add it to ALLOWED_CLIENT_ORIGINS on the server, or change it in Settings.'
+      : `Server check failed (${status}).`,
+  );
+
 const withTimeout = (signal?: AbortSignal) =>
   signal ? AbortSignal.any([signal, AbortSignal.timeout(10_000)]) : AbortSignal.timeout(10_000);
 
@@ -52,7 +69,7 @@ export async function inspectServer(baseUrl: string, signal?: AbortSignal) {
     redirect: 'error',
     cache: 'no-store',
   });
-  if (!response.ok) throw new ConnectionError(`Server check failed (${response.status}).`);
+  if (!response.ok) throw failed(response.status);
   return readServerInfo(await response.json());
 }
 
@@ -72,7 +89,7 @@ export async function requestTicket(baseUrl: string, key: string, signal?: Abort
   if (response.status === 401) throw new Unauthorized('That owner key doesn’t match this server.');
   if (response.status === 503)
     throw new ConnectionError('This server has no owner key yet. Set OWNER_KEY and redeploy it.');
-  if (!response.ok) throw new ConnectionError(`Server check failed (${response.status}).`);
+  if (!response.ok) throw failed(response.status);
   const result = syncTicketSchema.safeParse(await response.json());
   if (!result.success) throw new ConnectionError('This server sent an unexpected response.');
   return result.data.ticket;

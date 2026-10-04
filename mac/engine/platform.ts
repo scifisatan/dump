@@ -50,10 +50,8 @@ function restore(value: unknown): unknown {
 export function macPlatform(profile: ServerProfile): ClientPlatform {
   const file = `${profile.id}.json`;
   return {
-    persistence(store, status) {
-      let failure: unknown;
-      const report = 'This Mac could not save your changes. Keep Dump open and try again.';
-      const persister = createCustomPersister(
+    storage: (store, onError) => ({
+      persister: createCustomPersister(
         store,
         async () => {
           const text = native.readFile(file);
@@ -62,42 +60,12 @@ export function macPlatform(profile: ServerProfile): ClientPlatform {
         async (getContent) => writeFile(file, encode(getContent())),
         () => 0,
         () => {},
-        (error) => {
-          failure = error;
-          status(false, report);
-        },
+        onError,
         Persists.MergeableStoreOnly,
-      );
-      const listener = persister.addStatusListener((_persister, value) => {
-        if (value === 2) failure = undefined;
-        status(value === 2, failure ? report : null);
-      });
-      const check = () => {
-        if (failure) throw new Error(report);
-      };
-      return {
-        async load() {
-          if (native.readFile(file) === null) {
-            await persister.save();
-            check();
-          }
-          await persister.load();
-          check();
-        },
-        async save() {
-          await persister.save();
-          check();
-        },
-        async start() {
-          await persister.startAutoSave();
-          check();
-        },
-        async destroy() {
-          await persister.destroy();
-          persister.delListener(listener);
-        },
-      };
-    },
+      ),
+      isEmpty: async () => native.readFile(file) === null,
+    }),
+    storageFailure: 'This Mac could not save your changes. Keep Dump open and try again.',
     server: profile.server && createServerLink(profile.server, () => native.ownerKey(profile.id)),
     isOnline: () => native.isOnline(),
     watch(resume, offline, suspend) {

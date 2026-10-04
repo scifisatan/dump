@@ -1,5 +1,3 @@
-import { hc } from 'hono/client';
-import type { Api } from '../shared/api';
 import {
   CLASSIFY_TEXT_LIMIT,
   CLASSIFY_THRESHOLD,
@@ -8,7 +6,7 @@ import {
   type ClassifyRequest,
 } from '../shared/classify';
 import type { Collection, ListId } from '../shared/schema';
-import { ownerKeyHeaders, Unauthorized } from './connection';
+import { ownerKeyHeaders, serverUrl, Unauthorized } from './connection';
 
 export class ClassifyUnavailable extends Error {}
 
@@ -30,18 +28,14 @@ export async function requestList(
   request: ClassifyRequest,
   signal: AbortSignal,
 ): Promise<ListId | null> {
-  const api = hc<Api>(baseUrl);
-  const response = await api.api.classify.$post(
-    { json: request },
-    {
-      headers: ownerKeyHeaders(key),
-      init: {
-        signal: AbortSignal.any([signal, AbortSignal.timeout(10_000)]),
-        credentials: 'omit',
-        redirect: 'error',
-      },
-    },
-  );
+  const response = await fetch(`${serverUrl(baseUrl)}/api/classify`, {
+    method: 'POST',
+    headers: { ...ownerKeyHeaders(key), 'Content-Type': 'application/json' },
+    body: JSON.stringify(request),
+    signal: AbortSignal.any([signal, AbortSignal.timeout(10_000)]),
+    credentials: 'omit',
+    redirect: 'error',
+  });
   if (response.status === 401) throw new Unauthorized('The owner key no longer works.');
   if (response.status === 503) throw new ClassifyUnavailable();
   if (!response.ok) throw new Error(`Classification failed: ${response.status}`);

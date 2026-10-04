@@ -27,15 +27,7 @@ import { format, isToday, isYesterday, startOfDay } from 'date-fns';
 import { toast } from 'sonner';
 import { Link, NavLink, useLocation, useNavigate, useMatch } from 'react-router-dom';
 import type { Collection, Dump } from '../shared/schema';
-import {
-  capture,
-  clearDone,
-  exportDumps,
-  initializeStore,
-  syncNow,
-  updateDump,
-  useDumpStore,
-} from './store';
+import { client, exportDumps, useDumpStore } from './store';
 import { cn } from './lib/utils';
 import { useVisualViewport } from './lib/viewport';
 import { Brand } from './components/Brand';
@@ -140,9 +132,11 @@ export default function App() {
   const composing = !done;
 
   useEffect(() => {
-    void initializeStore().catch((error) =>
-      setFatal(error instanceof Error ? error.message : 'Could not open local storage.'),
-    );
+    void client
+      .start()
+      .catch((error) =>
+        setFatal(error instanceof Error ? error.message : 'Could not open local storage.'),
+      );
   }, []);
   // Keep the loading screen up until this device's notes are loaded, so the empty inbox never
   // flashes before them.
@@ -207,18 +201,25 @@ export default function App() {
     input.style.height = `${input.scrollHeight}px`;
   }, [draft, empty]);
 
-  function act(dump: Dump, changes: Parameters<typeof updateDump>[1], label: string) {
-    updateDump(dump.id, changes);
-    toast(label);
+  // The dump may have been removed, or its list deleted, on another device meanwhile.
+  function act(change: () => void, label: string) {
+    try {
+      change();
+      toast(label);
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'Could not change this dump.');
+    }
   }
   const actions: DumpActions = {
     complete: (dump) =>
-      act(dump, { done: !dump.done }, dump.done ? 'Marked incomplete' : 'A little less to do'),
-    remove: (dump) => act(dump, { deleted: true }, 'Dump removed'),
+      act(
+        () => client.setDone(dump.id, !dump.done),
+        dump.done ? 'Marked incomplete' : 'A little less to do',
+      ),
+    remove: (dump) => act(() => client.remove(dump.id), 'Dump removed'),
     file: (dump, list) =>
       act(
-        dump,
-        { list, classified_by: 'user' },
+        () => client.file(dump.id, list),
         list
           ? `Filed in ${lists.find((item) => item.id === list)?.label ?? 'your list'}`
           : 'Moved to inbox',
@@ -232,7 +233,8 @@ export default function App() {
     event?.preventDefault();
     if (!draft.trim() || !state.ready) return;
     try {
-      const dump = capture(draft);
+      // A list's composer files into that list; a `!list` prefix still wins.
+      const dump = client.capture(draft, currentList?.id ?? null);
       setDraft('');
       refocus.current = true;
       if (dump.list && dump.list !== currentList?.id)
@@ -311,7 +313,7 @@ export default function App() {
       )}
       <span className={syncPhase === 'problem' ? 'max-phone:sr-only' : 'sr-only'}>{syncText}</span>
       {state.sync === 'error' && (
-        <button className="font-medium underline" onClick={() => void syncNow()}>
+        <button className="font-medium underline" onClick={() => void client.syncNow()}>
           Retry
         </button>
       )}
@@ -460,7 +462,7 @@ export default function App() {
                   onClick={() => {
                     if (!confirmClear) return setConfirmClear(true);
                     setConfirmClear(false);
-                    const count = clearDone();
+                    const count = client.clearDone();
                     toast(`Cleared ${count} done ${count === 1 ? 'dump' : 'dumps'}`);
                   }}
                 >

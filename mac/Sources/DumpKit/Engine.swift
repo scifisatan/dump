@@ -78,8 +78,9 @@ public final class Engine {
     try await callAsync("close")
   }
 
-  public func snapshot() -> Snapshot? {
-    guard let json = try? call("snapshot").toString() else { return nil }
+  /// `full` includes every dump, for the notebook window.
+  public func snapshot(full: Bool = false) -> Snapshot? {
+    guard let json = try? call("snapshot", [full]).toString() else { return nil }
     return try? JSONDecoder().decode(Snapshot?.self, from: Data(json.utf8))
   }
 
@@ -93,6 +94,39 @@ public final class Engine {
   public func capture(_ text: String, list: String?) throws -> Captured {
     let json = try call("capture", [text, list ?? NSNull()]).toString() ?? ""
     return try JSONDecoder().decode(Captured.self, from: Data(json.utf8))
+  }
+
+  // MARK: Dumps and lists. Every change is final; there is no undo.
+
+  public func setDone(_ id: String, _ done: Bool) throws {
+    try call("setDone", [id, done])
+  }
+
+  /// Files a dump by hand; nil returns it to the inbox.
+  public func file(_ id: String, list: String?) throws {
+    try call("file", [id, list ?? NSNull()])
+  }
+
+  public func remove(_ id: String) throws {
+    try call("remove", [id])
+  }
+
+  /// Creates a list, or renames and recolors the one with `id`.
+  @discardableResult
+  public func saveList(label: String, color: String, id: String? = nil) throws -> Snapshot.List {
+    let json = try call("saveList", [label, color, id ?? NSNull()]).toString() ?? ""
+    return try JSONDecoder().decode(Snapshot.List.self, from: Data(json.utf8))
+  }
+
+  /// Deletes a list; its dumps go back to the inbox.
+  public func deleteList(_ id: String) throws {
+    try call("deleteList", [id])
+  }
+
+  /// Removes every done dump and returns how many there were.
+  @discardableResult
+  public func clearDone() throws -> Int {
+    Int(try call("clearDone").toInt32())
   }
 
   /// Resumes sync after the owner key was entered again.

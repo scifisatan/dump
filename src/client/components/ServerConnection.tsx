@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { Check, LoaderCircle } from 'lucide-react';
 import {
+  explainConnectionError,
   inspectServer,
   requestTicket,
   serverUrl,
@@ -14,12 +15,6 @@ import { Input } from './ui/input';
 // no server and no key.
 const DEV_SERVER = import.meta.env.DEV ? 'http://localhost:6190' : '';
 const DEV_KEY = import.meta.env.DEV ? 'dump-local-development-owner-key' : '';
-
-function describe(cause: unknown, fallback: string) {
-  if (cause instanceof TypeError)
-    return 'Could not reach this server. Check the address and its allowed client origins.';
-  return cause instanceof Error ? cause.message : fallback;
-}
 
 // Finds a Dump server, then checks its owner key before anything is saved. Used for first-run
 // setup, switching servers, and connecting a device-only notebook.
@@ -49,7 +44,7 @@ export function ServerConnection({
     try {
       await task(controller.signal);
     } catch (cause) {
-      if (!controller.signal.aborted) setError(describe(cause, fallback));
+      if (!controller.signal.aborted) setError(explainConnectionError(cause, fallback));
     } finally {
       if (!controller.signal.aborted) setBusy(false);
     }

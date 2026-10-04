@@ -1,9 +1,11 @@
 import type { MergeableStore } from 'tinybase';
+import type { AnyPersister } from 'tinybase/persisters';
 import type { PingResult } from '../shared/api';
 import type { ClassifyRequest } from '../shared/classify';
 import {
   collectionSchema,
   DEFAULT_LISTS,
+  dumpSchema,
   encodeCollection,
   decodeDump,
   encodeDump,
@@ -38,13 +40,9 @@ export type Snapshot = {
   syncError: string | null;
   sorting: ReadonlySet<string>;
 };
+const TEXT_LIMIT = dumpSchema.shape.text.maxLength ?? 20_000;
+
 export type SyncHandle = { start(): Promise<void>; destroy(): Promise<void> };
-export type Persistence = {
-  load(): Promise<void>;
-  save(): Promise<void>;
-  start(): Promise<void>;
-  destroy(): Promise<void>;
-};
 export type ServerLink = {
   inspect(signal: AbortSignal): Promise<PingResult>;
   connect(
@@ -56,16 +54,75 @@ export type ServerLink = {
   classify(request: ClassifyRequest, signal: AbortSignal): Promise<ListId | null>;
 };
 export type ClientPlatform = {
-  persistence(
+  // Where this device keeps the notebook: a TinyBase persister for `store` that passes the
+  // failures TinyBase would otherwise ignore to `onError`, and whether nothing is saved there yet.
+  storage(
     store: MergeableStore,
-    status: (saving: boolean, error: string | null) => void,
-  ): Persistence;
+    onError: (error: unknown) => void,
+  ): { persister: AnyPersister; isEmpty(): Promise<boolean> };
+  // What to tell the owner when this device cannot save.
+  storageFailure: string;
   // Null for a notebook kept only on this device: no sync and no AI filing.
   server: ServerLink | null;
   isOnline(): boolean;
   watch(resume: () => void, offline: () => void, suspend: () => void): () => void;
   tabs(store: MergeableStore): SyncHandle;
 };
+
+// The notebook's storage as the client uses it. TinyBase reports save failures to `onError`
+// instead of rejecting, so each step throws a failure recorded meanwhile.
+function openStorage(
+  platform: ClientPlatform,
+  store: MergeableStore,
+  status: (saving: boolean, error: string | null) => void,
+) {
+  const report = platform.storageFailure;
+  let failure: unknown;
+  const { persister, isEmpty } = platform.storage(store, (error) => {
+    failure = error;
+    status(false, report);
+  });
+  const listener = persister.addStatusListener((_persister, value) => {
+    if (value === 2) failure = undefined;
+    status(value === 2, failure ? report : null);
+  });
+  const check = () => {
+    if (failure) throw new Error(report);
+  };
+  const statusChange = () =>
+    new Promise<void>((resolve) => {
+      const waiting = persister.addStatusListener(() => {
+        persister.delListener(waiting);
+        resolve();
+      });
+    });
+  return {
+    async load() {
+      // A new notebook is written once before it is read.
+      if (await isEmpty()) {
+        await persister.save();
+        check();
+      }
+      await persister.load();
+      check();
+    },
+    async save() {
+      // TinyBase announces a save only when it is idle. Starting while an auto-save is in flight
+      // would leave that auto-save's failure standing, though this save writes everything.
+      while (persister.getStatus() !== 0) await statusChange();
+      await persister.save();
+      check();
+    },
+    async start() {
+      await persister.startAutoSave();
+      check();
+    },
+    async destroy() {
+      await persister.destroy();
+      persister.delListener(listener);
+    },
+  };
+}
 
 // One instance owns one notebook. UI and host runtimes are adapters, not dependencies.
 export function createDumpClient(platform: ClientPlatform) {
@@ -86,7 +143,7 @@ export function createDumpClient(platform: ClientPlatform) {
     snapshot = { ...snapshot, ...patch };
     listeners.forEach((listener) => listener());
   };
-  const persistence = platform.persistence(store, (saving, storageError) =>
+  const persistence = openStorage(platform, store, (saving, storageError) =>
     emit({ saving, storageError }),
   );
   let lifetime = new AbortController();
@@ -254,10 +311,12 @@ export function createDumpClient(platform: ClientPlatform) {
   }
 
   // Capture is synchronous and usually unfiled; Jev chooses the list afterwards (see autoFile).
-  // An explicit !list prefix files it immediately.
-  function capture(raw: string) {
+  // An explicit !list prefix files it immediately, as does `list`, the list being captured into.
+  function capture(raw: string, list: ListId | null = null) {
     assertReady();
-    const dump = makeDump(raw, crypto.randomUUID(), Date.now(), snapshot.lists);
+    if (raw.trim().length > TEXT_LIMIT)
+      throw new Error(`A dump can be up to ${TEXT_LIMIT.toLocaleString('en-US')} characters.`);
+    const dump = makeDump(raw, crypto.randomUUID(), Date.now(), snapshot.lists, list);
     store.setRow('dumps', dump.id, { data: encodeDump(dump) });
     if (!dump.list) setTimeout(() => autoFile(dump.id), 0);
     return dump;
@@ -334,11 +393,12 @@ export function createDumpClient(platform: ClientPlatform) {
     if (signal.aborted || !running()) return;
     // The owner may have filed, completed or removed it while Jev was thinking; they win.
     if (!needsList(findDump(id))) return;
-    if (listExists(list)) updateDump(id, { list, classified_by: 'ai' });
-    else if (listExists(DEFAULT_LIST)) updateDump(id, { list: DEFAULT_LIST });
+    if (listExists(list)) write(id, { list, classified_by: 'ai' });
+    else if (listExists(DEFAULT_LIST)) write(id, { list: DEFAULT_LIST });
   }
 
-  function updateDump(
+  // Callers use the commands below, which keep `classified_by` consistent with `needsList`.
+  function write(
     id: string,
     changes: Partial<Pick<Dump, 'list' | 'done' | 'deleted' | 'classified_by'>>,
   ) {
@@ -350,6 +410,30 @@ export function createDumpClient(platform: ClientPlatform) {
       'data',
       encodeDump({ ...previous, ...changes, updated_at: Date.now() }),
     );
+  }
+
+  // The dump an action names; it may have been removed on another device meanwhile.
+  function existing(id: string) {
+    assertReady();
+    const dump = findDump(id);
+    if (!dump || dump.deleted) throw new Error('This dump is no longer in your notebook.');
+    return dump.id;
+  }
+
+  function setDone(id: string, done: boolean) {
+    write(existing(id), { done });
+  }
+
+  // Filing by hand, including back to the inbox (null), records the owner's choice, so Jev
+  // leaves it alone.
+  function file(id: string, list: ListId | null) {
+    const target = existing(id);
+    if (list !== null && !listExists(list)) throw new Error('That list no longer exists.');
+    write(target, { list, classified_by: 'user' });
+  }
+
+  function remove(id: string) {
+    write(existing(id), { deleted: true });
   }
 
   function saveList(label: string, color: string, id?: string) {
@@ -378,14 +462,16 @@ export function createDumpClient(platform: ClientPlatform) {
     return list;
   }
 
-  // Tombstones the list and moves its dumps (open and done) back to the inbox.
+  // Tombstones the list and moves its dumps (open and done) back to the inbox, unclassified, so
+  // autoFile sorts the open ones again.
   function deleteList(id: string) {
     assertReady();
     const list = snapshot.lists.find((item) => item.id === id);
     if (!list) return;
     store.transaction(() => {
       store.setRow('lists', id, { data: encodeCollection({ ...list, deleted: true }) });
-      for (const dump of snapshot.dumps) if (dump.list === id) updateDump(dump.id, { list: null });
+      for (const dump of snapshot.dumps)
+        if (dump.list === id) write(dump.id, { list: null, classified_by: null });
     });
   }
 
@@ -394,7 +480,7 @@ export function createDumpClient(platform: ClientPlatform) {
     assertReady();
     const done = snapshot.dumps.filter((dump) => dump.done && !dump.deleted);
     store.transaction(() => {
-      for (const dump of done) updateDump(dump.id, { deleted: true });
+      for (const dump of done) write(dump.id, { deleted: true });
     });
     return done.length;
   }
@@ -441,7 +527,9 @@ export function createDumpClient(platform: ClientPlatform) {
     syncNow,
     reconnect,
     capture,
-    updateDump,
+    setDone,
+    file,
+    remove,
     saveList,
     deleteList,
     clearDone,

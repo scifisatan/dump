@@ -6,13 +6,15 @@ import SwiftUI
 final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
   private var model: AppModel!
   private var panel: CapturePanelController!
+  private var notebook: NotebookWindowController!
   private var hotKey: HotKey!
   private var statusItem: NSStatusItem!
   private var settings: NSWindow?
   private var terminationSignal: DispatchSourceSignal?
   private let statusLine = NSMenuItem(title: "", action: nil, keyEquivalent: "")
-  private let inboxLine = NSMenuItem(title: "", action: nil, keyEquivalent: "")
+  private let inboxLine = NSMenuItem(title: "", action: #selector(openInbox), keyEquivalent: "")
   private let captureItem = NSMenuItem(title: "Dump Something…", action: #selector(capture), keyEquivalent: "")
+  private let notebookItem = NSMenuItem(title: "Open Notebook", action: #selector(openNotebook), keyEquivalent: "")
   private let syncItem = NSMenuItem(title: "Sync Now", action: #selector(syncNow), keyEquivalent: "")
 
   func applicationDidFinishLaunching(_ notification: Notification) {
@@ -32,6 +34,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
   private func start() {
     panel = CapturePanelController(model: model)
     panel.openSettings = { [weak self] in self?.showSettings() }
+    notebook = NotebookWindowController(model: model)
+    notebook.openSettings = { [weak self] in self?.showSettings() }
+    notebook.visibilityChanged = { [weak self] in self?.updateActivationPolicy() }
+    model.showNotebook = { [weak self] in self?.notebook.show() }
     hotKey = HotKey { [weak self] in self?.panel.toggle() }
     model.registerShortcut = { [weak self] in self?.hotKey.register($0) ?? false }
     model.pauseShortcut = { [weak self] paused in
@@ -40,6 +46,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     }
     model.showPanel = { [weak self] in self?.panel.show() }
     let registered = hotKey.register(model.shortcut)
+    setUpMainMenu()
     setUpStatusItem()
     watchSystem()
     Task {
@@ -66,10 +73,95 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     NSApp.reply(toApplicationShouldTerminate: true)
   }
 
-  // Opening the app again (from Finder or Spotlight) shows the panel.
+  // Opening the app again (from Finder or Spotlight) shows the panel; clicking it in the Dock
+  // while a window is open brings that window back.
   func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows flag: Bool) -> Bool {
-    panel?.show()
+    if notebook?.isOpen == true {
+      notebook.show()
+    } else if settingsOpen {
+      showSettings()
+    } else {
+      panel?.show()
+    }
     return false
+  }
+
+  // MARK: Windows
+
+  private var settingsOpen: Bool { settings.map { $0.isVisible || $0.isMiniaturized } ?? false }
+
+  /// A menu bar app until a window opens: then Dump joins the Dock and ⌘Tab and shows its menus,
+  /// so the window is easy to get back to.
+  private func updateActivationPolicy() {
+    let policy: NSApplication.ActivationPolicy = notebook.isOpen || settingsOpen ? .regular : .accessory
+    if NSApp.activationPolicy() != policy { NSApp.setActivationPolicy(policy) }
+  }
+
+  /// The menus shown while a window is open. The Edit menu also gives the panel's text box its
+  /// copy, paste and undo shortcuts.
+  private func setUpMainMenu() {
+    let main = NSMenu()
+    func add(_ title: String, _ items: [NSMenuItem]) -> NSMenu {
+      let menu = NSMenu(title: title)
+      items.forEach(menu.addItem)
+      let holder = NSMenuItem(title: title, action: nil, keyEquivalent: "")
+      holder.submenu = menu
+      main.addItem(holder)
+      return menu
+    }
+    func standard(_ title: String, _ action: Selector, key: String = "", _ modifiers: NSEvent.ModifierFlags = .command)
+      -> NSMenuItem
+    {
+      let item = NSMenuItem(title: title, action: action, keyEquivalent: key)
+      item.keyEquivalentModifierMask = modifiers
+      return item
+    }
+    let services = NSMenuItem(title: "Services", action: nil, keyEquivalent: "")
+    services.submenu = NSMenu(title: "Services")
+    NSApp.servicesMenu = services.submenu
+
+    _ = add("Dump", [
+      standard("About Dump", #selector(NSApplication.orderFrontStandardAboutPanel(_:))),
+      .separator(),
+      item("Settings…", #selector(showSettings), key: ","),
+      .separator(),
+      services,
+      .separator(),
+      standard("Hide Dump", #selector(NSApplication.hide(_:)), key: "h"),
+      standard("Hide Others", #selector(NSApplication.hideOtherApplications(_:)), key: "h", [.command, .option]),
+      standard("Show All", #selector(NSApplication.unhideAllApplications(_:))),
+      .separator(),
+      standard("Quit Dump", #selector(NSApplication.terminate(_:)), key: "q"),
+    ])
+    let newList = item("New List…", #selector(newList), key: "n")
+    newList.keyEquivalentModifierMask = [.command, .shift]
+    _ = add("File", [
+      item("Dump Something…", #selector(capture)),
+      item("Open Notebook", #selector(openNotebook), key: "o"),
+      newList,
+      .separator(),
+      standard("Close Window", #selector(NSWindow.performClose(_:)), key: "w"),
+    ])
+    _ = add("Edit", [
+      standard("Undo", Selector(("undo:")), key: "z"),
+      standard("Redo", Selector(("redo:")), key: "z", [.command, .shift]),
+      .separator(),
+      standard("Cut", #selector(NSText.cut(_:)), key: "x"),
+      standard("Copy", #selector(NSText.copy(_:)), key: "c"),
+      standard("Paste", #selector(NSText.paste(_:)), key: "v"),
+      standard("Paste and Match Style", #selector(NSTextView.pasteAsPlainText(_:)), key: "v", [.command, .option, .shift]),
+      standard("Delete", #selector(NSText.delete(_:))),
+      standard("Select All", #selector(NSText.selectAll(_:)), key: "a"),
+      .separator(),
+      item("Find…", #selector(find), key: "f"),
+    ])
+    NSApp.windowsMenu = add("Window", [
+      standard("Minimize", #selector(NSWindow.performMiniaturize(_:)), key: "m"),
+      standard("Zoom", #selector(NSWindow.performZoom(_:))),
+      .separator(),
+      standard("Bring All to Front", #selector(NSApplication.arrangeInFront(_:))),
+    ])
+    NSApp.mainMenu = main
   }
 
   // MARK: Menu bar
@@ -82,10 +174,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     menu.delegate = self
     menu.autoenablesItems = false
     captureItem.target = self
+    notebookItem.target = self
     syncItem.target = self
+    inboxLine.target = self
     statusLine.isEnabled = false
-    inboxLine.isEnabled = false
     menu.addItem(captureItem)
+    menu.addItem(notebookItem)
     menu.addItem(.separator())
     menu.addItem(statusLine)
     menu.addItem(inboxLine)
@@ -127,6 +221,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
   @objc private func capture() { panel.show() }
 
+  @objc private func openNotebook() { notebook.show() }
+
+  @objc private func openInbox() { notebook.show(.inbox) }
+
+  @objc private func newList() { notebook.newList() }
+
+  @objc private func find() { notebook.focusSearch() }
+
   @objc private func syncNow() {
     if model.snapshot.sync == .signedOut { showSettings() } else { model.engine.resume() }
   }
@@ -143,9 +245,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
       window.isReleasedWhenClosed = false
       window.center()
       settings = window
+      NotificationCenter.default.addObserver(
+        forName: NSWindow.willCloseNotification, object: window, queue: .main
+      ) { [weak self] _ in
+        // The window still counts as visible until it has closed.
+        DispatchQueue.main.async { self?.updateActivationPolicy() }
+      }
     }
-    NSApp.activate()
     settings?.makeKeyAndOrderFront(nil)
+    updateActivationPolicy()
+    NSApp.activate()
   }
 
   // MARK: System events

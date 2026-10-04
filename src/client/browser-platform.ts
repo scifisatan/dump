@@ -7,54 +7,22 @@ import { readKey } from './profiles';
 
 export function browserPlatform(profile: ServerProfile): ClientPlatform {
   return {
-    persistence(store, status) {
-      let failure: unknown;
-      const report =
-        'This browser could not save your changes. Keep this tab open and export a copy.';
-      const persister = createIndexedDbPersister(store, databaseName(profile), 1, (error) => {
-        failure = error;
-        status(false, report);
-      });
-      const listener = persister.addStatusListener((_persister, value) => {
-        if (value === 2) failure = undefined;
-        status(value === 2, failure ? report : null);
-      });
-      const check = () => {
-        if (failure) throw new Error(report);
-      };
-      return {
-        async load() {
-          const empty = await new Promise<boolean>((resolve, reject) => {
-            const request = indexedDB.open(databaseName(profile));
-            request.onerror = () => reject(request.error);
-            request.onblocked = () => reject(new Error('Close other Dump tabs and retry.'));
-            request.onsuccess = () => {
-              const isEmpty = request.result.objectStoreNames.length === 0;
-              request.result.close();
-              resolve(isEmpty);
-            };
-          });
-          if (empty) {
-            await persister.save();
-            check();
-          }
-          await persister.load();
-          check();
-        },
-        async save() {
-          await persister.save();
-          check();
-        },
-        async start() {
-          await persister.startAutoSave();
-          check();
-        },
-        async destroy() {
-          await persister.destroy();
-          persister.delListener(listener);
-        },
-      };
-    },
+    storage: (store, onError) => ({
+      persister: createIndexedDbPersister(store, databaseName(profile), 1, onError),
+      isEmpty: () =>
+        new Promise<boolean>((resolve, reject) => {
+          const request = indexedDB.open(databaseName(profile));
+          request.onerror = () => reject(request.error);
+          request.onblocked = () => reject(new Error('Close other Dump tabs and retry.'));
+          request.onsuccess = () => {
+            const empty = request.result.objectStoreNames.length === 0;
+            request.result.close();
+            resolve(empty);
+          };
+        }),
+    }),
+    storageFailure:
+      'This browser could not save your changes. Keep this tab open and export a copy.',
     server: profile.server && createServerLink(profile.server, () => readKey(profile.id)),
     isOnline: () => navigator.onLine,
     watch(resume, offline, suspend) {

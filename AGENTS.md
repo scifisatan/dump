@@ -1,82 +1,49 @@
-# Dump — project context
+# Dump
 
-## Product
-One person's capture-first app for thoughts and links. Capture immediately; organize optionally. The owner is Abi. One hosted web app for every user at `dump.abishrestha.com.np`; each user deploys their own server and enters its URL (Abi's server: `dump-api.abishrestha.com.np`), or keeps a notebook on one device only. Each server is private to its owner through one owner key. This is a single package with three separately built targets, not a monorepo: the web client and API Worker (deployed), and a personal Mac app (`mac/`, built from source).
+A capture-first notebook for one person's thoughts and links: capture right away, organize later if at all. The owner is Abi. Everyone uses one hosted web app at `dump.abishrestha.com.np`. Each user either deploys a private server (Abi's is `dump-api.abishrestha.com.np`) or keeps a notebook on one device only. It is one package with three separately built targets: the static web client, the API Worker, and a personal Mac app. Dump is prerelease, so formats change in place and there is no API or schema versioning.
 
-## Requirements
-- Capture updates the TinyBase memory store and UI synchronously. IndexedDB persistence is asynchronous; surface failures. Network serialization, requests, and AI must run after the capture handler returns.
-- TinyBase owns conflict resolution through its hybrid logical clocks. `updated_at` is application metadata, never a competing merge clock.
-- Each dump is an atomic JSON cell. Domain schema and codecs live in `src/shared/schema.ts`. Soft-delete with a `deleted` tombstone; never physically remove rows without a deliberate migration/compaction design.
-- Sync uses TinyBase's built-in WebSocket synchronizer: `createWsSynchronizer` on the client, `WsServerDurableObject` on the server (`/api/sync`). Peers compare hashes and exchange only differing rows; live edits relay to open devices. Tabs sync with `createBroadcastChannelSynchronizer`. Do not build a custom sync protocol on top.
-- Preserve merge metadata across SQLite persistence, restarts, and schema changes. The sync server relays rows without inspecting them, so every reader decodes rows through `readRows` (`src/shared/merge.ts`) and skips any that fail validation.
-- Servers are private. Everything except `/api/ping` needs the server's `OWNER_KEY` Worker secret: a bearer header on HTTP, and on the WebSocket upgrade a stateless 60-second HMAC ticket bought with it (`src/server/auth.ts`). A missing key or one under 32 characters leaves the server refusing access. Rotating the key signs out every device; each keeps its local data and asks for the new key. Per-device tokens, pairing, and cookies are deliberately not built; revisit only with a new threat model.
-- No user accounts, sessions, cookies, multi-tenancy, D1, Postgres, or application KV database. The owner key is a generated deployment secret, not a user-chosen password.
-- Conflict policy: the latest change wins, including edits made offline. The owner uses one device at a time and connects to sync; there is no manual-precedence or revision-conditional merge. Keep live sync between open tabs and devices.
-- No undo. Done, filing, and remove are final; removal still writes a `deleted` tombstone so other copies do not resurrect the item.
-- AI may propose/file/tag, never delete or rewrite original text. Jev is optional. Without `JEV_API_KEY`, or with fewer than two lists, dumps without a `!list` prefix stay unfiled in the inbox for the owner to sort. With it, every dump ends up in a list: an explicit `!list` prefix files it at capture; otherwise it is captured unfiled and `autoFile` in `src/core/client.ts` asks Jev afterwards, filing to Jev's choice (`classified_by: 'ai'`, confidence ≥ `CLASSIFY_THRESHOLD`) or else To do (`DEFAULT_LIST`). Cards show "Sorting…" meanwhile. Unfiled open dumps are the durable queue: failures and closed tabs are retried on the next load or reconnect. A manual filing, completion, or removal made while Jev is thinking wins. Server-side AI work would need durable retry state; `waitUntil` alone is insufficient.
-- Motion uses opacity/transform at 120–180ms, honoring reduced motion. Preserve accessible buttons as alternatives to gestures.
+## Rules
 
-## Stack and layout
-React, Vite, Wrangler, Tailwind v4, TinyBase, Zod, Hono, lucide-react, sonner, date-fns. One SQLite-backed `DumpDO`, addressed by `idFromName('me')`.
+These apply everywhere. The arrows point to the tests that enforce them; each area doc lists its own rules.
 
-`src/shared`: domain schema, API contract, store factory and validated row reading.
-`src/core`: platform-independent client instances, commands, classification queue, connection validation and lifecycle, and the server link (`server-link.ts`) that the browser and Mac adapters share.
-`src/client`: React UI, browser persistence/transport adapters, connection profiles, styles.
-`src/server`: API-only Worker: Hono routes and the SQLite-backed Durable Object. It serves no UI.
-`mac`: menu bar capture app (Swift, macOS 14+). `mac/engine` bundles `src/core` and TinyBase into `mac/build/engine.js`; `DumpKit` runs it in JavaScriptCore and supplies the platform natively (timers, randomness, HTTP, WebSockets, notebook files, network state, Keychain); `Dump` is the AppKit/SwiftUI shell (global hotkey, capture panel, settings, menu bar).
-`tests`: unit and Playwright integration tests.
+- Capture updates the TinyBase store and the UI synchronously. Persistence, network requests and AI run after the capture handler returns. → `tests/client.test.ts` "updates memory synchronously"
+- TinyBase owns merging: hybrid logical clocks, and the latest change wins for the whole dump, including offline edits. `updated_at` is display metadata only. Sync is TinyBase's own WebSocket synchronizer, with no custom protocol on top. → `tests/domain.test.ts` "TinyBase merge contract"
+- Each dump is one atomic JSON cell. Removing a dump writes a `deleted` tombstone; rows are never physically removed. There is no undo.
+- Every reader decodes rows through `readRows` (`src/shared/merge.ts`) and skips rows that fail validation. The server relays rows without reading them. → `tests/domain.test.ts` "skips rows a peer sent"
+- Dumps change only through the core's commands (`capture`, `setDone`, `file`, `remove`, `saveList`, `deleteList`, `clearDone`). These keep `classified_by` consistent with the filing queue. → `tests/client.test.ts` "dump and list actions"
+- AI may file a dump, but never deletes it or rewrites its text.
+- Each server has one owner key. There are no accounts, sessions, cookies, multi-tenancy, D1, Postgres or application KV. Per-device tokens are deliberately not built. → `tests/auth.test.ts`
+- `src/core` runs both in browsers and in the Mac app's JavaScriptCore, so it may use only the web APIs that `mac/engine/polyfills.ts` installs. → `mac/Tests/DumpKitTests`
 
-Client and Worker compile separately (`tsconfig.client.json`, `tsconfig.json`) and build separately: Vite builds only the static client (`dist/client/`, deployed with `wrangler.client.jsonc`); Wrangler bundles and runs the Worker (`wrangler.jsonc`). Browser code imports the shared API contract, not Worker implementation types. Do not reintroduce the Cloudflare Vite plugin or serve UI from the Worker.
+## Docs map
+
+Each fact has one owning doc. Read the owning doc before changing its paths.
+
+| Area | Paths | Owning doc |
+| --- | --- | --- |
+| Data model, merge, sync, commands, filing and Jev queue, connections | `src/shared/`, `src/core/` | [docs/core.md](docs/core.md) |
+| API Worker: owner key, origins, Jev proxy, Durable Object | `src/server/`, `wrangler.jsonc` | [docs/server.md](docs/server.md) |
+| Web UI: views, look, phone keyboard, loading screen, first run, CSP | `src/client/`, `index.html`, `public/`, `wrangler.client.jsonc` | [docs/web-client.md](docs/web-client.md) |
+| Mac app: engine, polyfills, Swift shell, build, checks | `mac/` | [docs/mac.md](docs/mac.md) |
+| Unit and e2e test setup, debugging failures | `tests/`, `playwright.config.ts` | [docs/testing.md](docs/testing.md) |
+| Deploy, versions, tags, GitHub releases | `run.tasks` in `vite.config.ts`, `mac/Info.plist` | [docs/release.md](docs/release.md) |
+| Usage, architecture diagrams, code map, decisions, deploy guide, roadmap | for humans | [README.md](README.md) |
+| Rules a reviewer enforces on a diff | | [CODING_STANDARDS.md](CODING_STANDARDS.md) |
+
+## Keeping docs true
+
+- Make each doc update in the same change as the code. If a change alters a rule, command, gotcha or behavior that an owning doc describes, update that doc. If it changes what a user sees, how setup works or how deploys work, update README. If it adds, removes or renames a file under `src/` or `mac/`, update README's Code map.
+- State each fact once, in its owning doc. Anywhere else, link to it.
+- A new rule needs a test, and the doc line names that test. If no test can check the rule, the line says so.
+- When something stops being true, delete it. Docs describe the present; history belongs in git.
 
 ## Commands
-`npm run dev` — web client at http://localhost:6191 and API Worker + DO at http://localhost:6190 (`vp run --parallel web`; the `api` task), separate origins like production. The dev API's owner key is `dump-local-development-owner-key`; the dev connect form prefills it and the local API address.
-`npm run build` — type checks, `build:client` (static client in `dist/client/`) and `build:server` (Worker bundle dry run in `dist/server/`).
-`npm run check` — format check, lint, domain/merge tests, type checks, both builds.
-`npm run format` — format the repo with `vp fmt` (Oxfmt).
-`npm run lint` — `vp lint` (Oxlint) plus React Doctor's per-file React diagnostics.
-`npm test` — `vp test` (Vitest) unit tests, single run.
-`npm run test:e2e` — two `wrangler dev` API servers on 6192/6193 with isolated `.wrangler/test-state` / `.wrangler/test-state-peer` storage and `tests/e2e/server.env` (its owner key matches `tests/e2e/servers.ts`), plus the built client on 6194, served by `wrangler dev --config wrangler.client.jsonc` so `public/_headers` (CSP) applies. A setup project onboards once; other tests reuse its saved notebook, and connection tests start as new visitors.
-`npx vp run deploy:server` / `npx vp run deploy:client` — lint, test, typecheck, then deploy only that half. Deploy both, server first, when the API contract changes, then rebuild the Mac app.
-`npm run typegen` — regenerate Worker binding types when needed.
-`npm run mac:install` — build `mac/build/Dump.app` (engine bundle, release binary, icon), sign it with `DUMP_SIGN_IDENTITY` from `mac/.env.local` (ad hoc without it), replace `/Applications/Dump.app` and relaunch it. `npm run mac:build` only builds; `npm run mac:engine` only bundles the engine (`typecheck` also checks `mac/engine`). `cd mac && swift test` runs the engine tests; `swift run dump-check --server URL --key KEY --origin ORIGIN [--capture TEXT] [--expect TEXT]` checks sync against a running server.
 
-Tooling is Vite+ (`vite-plus`, CLI `vp`). All Vite, Vitest (`test`), Oxlint (`lint`), and Oxfmt (`fmt`) config lives in `vite.config.ts`; do not add `vitest.config.ts`, `.oxlintrc*`, or `.oxfmtrc*`. `vite` is aliased to `@voidzero-dev/vite-plus-core` through `overrides` in `package.json`. Tests import from `vite-plus/test`. The PWA plugin is skipped when `VITEST` is set, because unit tests are plain Node code.
+`package.json` lists the scripts. These are the gotchas around them:
 
-## Code quality guardrails
-
-The repository uses the vendored anti-slop principles from dmmulroy/anti-slop: keep boundary parsing explicit, do not widen known values to `unknown` and assert them back, avoid unchecked dictionary contracts, avoid module mocks, and justify any necessary non-const type assertion with a nearby `// SAFETY:` comment. These are review rules for future changes; they are deliberately kept in project guidance because anti-slop is intended to be vendored and locally maintained rather than pulled as an opaque npm dependency.
-
-React Doctor is enabled through Oxlint for effect cleanup, derived state, event-handler effects, array-index keys, and fetch-in-effect checks. Warnings are reviewed during `npm run lint`; they do not block this initial slice until the baseline is clean.
-
-## Current slice and limitations
-Capture, explicit list prefixes, hashtags, URL detection, lists, search, done, simple triage, IndexedDB, offline production shell, live WebSocket sync, export/additive import.
-
-UI first pass: shadcn/Radix primitives, cmdk search palette, next-themes Light/Dark/System, React Router. One clean inbox: the only views are Inbox (every open dump, each showing its list), each list, and Done (there is no board or All view, and no dnd-kit). Each view is a header, a compact dump list, and a composer pinned to the bottom like a chat; Done has no composer because it only holds finished dumps. Search and Settings live in the sidebar; `/marketing` is a separate lazy page that does not initialize the notebook on a direct visit. Backups live in Settings. Preserve the lime asterisk badge, off-white/charcoal surfaces, and lime actions; do not reintroduce a global lavender theme. Individual list colors remain category accents. An empty view centers a larger composer instead of pinning it.
-
-Phone keyboard: the app shell is `position: fixed` to the visual viewport, not `h-dvh`, because iOS overlays the keyboard without resizing the layout viewport and ignores `interactive-widget=resizes-content` (still set in `index.html` for Android). `useVisualViewport` (`src/client/lib/viewport.ts`) writes `--vv-height`/`--vv-top` on the root and sets `data-keyboard` while the keyboard is open (Tailwind `keyboard:` variant in `styles.css`). On touch devices it predicts the height on focus/blur from the last measured keyboard height (remembered in `localStorage`) so the layout animates with the keyboard, then corrects to the real measurement; pinch zoom is ignored. The height transition uses iOS's keyboard curve (250ms), a deliberate exception to the motion rule. Composer submit buttons `preventDefault` on pointerdown so tapping them keeps focus and the keyboard open. `html`/`body` disable overscroll.
-
-Lists are now synced atomic JSON records with stable IDs and numeric positions. Not yet in production, so there is no schema versioning or backwards compatibility; change formats in place. Each notebook profile has its own IndexedDB `dump-v1-<profile-id>`. Views show the newest dump at the bottom, next to the composer. Lists keep their stored `position` but there is no reordering UI; card dragging/order and list archiving are pending. Done has a "Clear done" button that, after a confirm click, tombstones every completed dump (`clearDone`). Deleting a list (from its editor, with a confirm click) tombstones it and unfiles its dumps (`list: null`) so `autoFile` re-sorts them on the next load or reconnect.
-
-Known architectural risks (the former `docs/architecture-review.md` was removed; these are what remained open):
-- Capture work grows with the full dataset: `rebuild()` decodes and sorts every dump after each transaction, App repeats filters/counts, and search mounts every candidate. Deferred until the data grows; then measure capture latency, adopt TinyBase queries/indexes or memoized selectors, and virtualize long lists. No evidence yet requires a database change.
-- Client instances now have tested start/stop lifecycles in `src/core/client.ts`; browser storage, tab sync and device events are adapters. The Mac app uses this boundary; keep it for Raycast/Android work. Network and AI work stay outside capture handlers. `/marketing` still avoids notebook initialization.
-
-Jev (TypeSafe System One model) chooses a list for new dumps. The browser cannot call Jev (CORS rejects our origin, and the key must stay secret), so `POST /api/classify` in the Worker is a stateless proxy: it validates `{ text, lists }`, sends one Choice question with list IDs plus `leave_in_inbox`, and returns `{ list, confidence }`. Mapping lives in `src/shared/classify.ts`; the network call in `src/core/classify.ts`. The key is `JEV_API_KEY` (`.env.local` in dev, a Worker secret in production); Jev is on exactly when the key is set, `/api/ping` reports `classify`, and e2e servers load only `tests/e2e/server.env`, so they never call Jev. The route needs the owner key and keeps a coarse per-isolate rate limit as a brake on a runaway client. `CLASSIFY_THRESHOLD` is 0.4 because Buy/Decor answers came back at 0.60–0.65 in the first live check; retune it against a labeled set of real dumps rather than guessing. Confidence is not an accuracy guarantee.
-
-`README.md` is the human-facing guide (usage, architecture diagrams, deploy, security model); keep it consistent with this file when behavior changes.
-
-Sync has no snapshot size limit: only differing rows travel, and large messages are fragmented. Sync requires WebSockets; there is no HTTP fallback. Import is additive: it restores missing IDs and does not rewind existing records. Simultaneous edits of the same item converge to one whole-item winner; this is not collaborative text editing. Local development and production are different origins and have different local copies. Export/import transfers data.
-
-Personal servers: one Cloudflare deployment per owner; no central account registry or multi-tenancy. The Worker is API-only; the web client is a separate static deployment that always starts with server setup. The hosted app serves all users, and `ALLOWED_CLIENT_ORIGINS` defaults to its origin so forks work with it unchanged. Users trust the hosted app's code; self-hosting the client stays supported. Settings accepts an HTTPS server origin (HTTP only on localhost). `ALLOWED_CLIENT_ORIGINS` (`vars` in `wrangler.jsonc`; dev and e2e override it) is a comma-separated exact-origin allowlist; it applies to HTTP and WS upgrades, with HTTP preflights supported. Requests without an allowed Origin, including a missing Origin or the server's own origin, get 403, so a future native client must send an allowed Origin as well as the owner key. Origin policy is browser policy; the owner key is the authentication.
-
-Connections are isolated local profiles (`dump-connections` settings, separate IndexedDB and BroadcastChannel names). Switches flush storage, stop sync/listeners/retries/AI, then reload; failures prevent switching. Other tabs keep their old profile until reloaded. No implicit data transfer: use export/import. `/api/ping` reports app, persistent namespace-scoped Durable Object ID, sync protocol, whether an owner key is configured, and AI capability; validate before syncing. Pin the ID locally and include it in the WS upgrade, where the server rechecks it. A new notebook at the same URL requires a new profile. No API/schema versioning: this is prerelease experimentation and formats change in place. Raycast, Android and non-Cloudflare server adapters remain pending.
-
-First run and device-only notebooks: `/` (and any notebook path) renders the notebook when this browser has a saved notebook, otherwise the landing page, decided synchronously from localStorage (`hasNotebook` in `src/client/registry.ts`). There is no redirect, and returning visitors never load landing or onboarding code; `/marketing` stays reachable for everyone. The landing page's onboarding (`src/client/components/Onboarding.tsx`) saves nothing until the server accepts the owner key (checked with `POST /api/sync-ticket`) or the visitor chooses this device only. A device-only profile has `server: null`: no sync, no Jev, sync state `local`, and the app requests persistent storage. From Settings it can connect a server later; the same local database then merges into that server's notebook. A refused key puts sync in `signed-out` (no retries) until Settings verifies a new key and calls `reconnect()`. Owner keys live in localStorage under `dump-owner-key:<profile-id>`, outside the registry, so secret storage stays a platform adapter concern. The static host sends a CSP from `public/_headers` that allows only our own scripts; keep the client free of inline and third-party scripts.
-
-Loading: `#boot` in `index.html` is a CSS-only loading screen that covers the page from first paint; `public/theme-init.js` (external, for the CSP) applies the saved theme before paint so neither it nor the app flashes the wrong colors. `src/client/boot.ts` keeps it up while anything holds it: the page load until React's first commit, the root Suspense fallback while a screen's code loads, and App until the notebook's local data is ready. It appears only after 200ms and then stays at least 500ms, so fast loads show nothing and slow ones never flicker; after 2s and 10s it adds reassurance text. Its looping turn is a deliberate exception to the motion rule; reduced motion shows a static mark. The error boundary dismisses it.
-
-Mac app (`mac/`): personal builds only. It is not notarized or distributed (no paid Apple Developer account); apps built on the Mac that runs them are not quarantined, and signing with a stable identity keeps the Keychain's access across rebuilds. It runs the web app's own client core, so capture, `!list` filing, Jev sorting, profiles and sync behave as on the web. `src/core` may use only the web APIs `mac/engine/polyfills.ts` provides (timers, queueMicrotask, crypto random values and UUIDs, TextEncoder, URL/URLSearchParams, structuredClone, DOMException, AbortController/AbortSignal with `any`/`timeout`, Headers, string-body fetch without redirects, WebSocket); add a polyfill when core needs more. TextEncoder must match browsers byte for byte because TinyBase hashes its output. As a non-browser client the app sends an allowed Origin: the hosted app's, or the dev client's for a localhost server, overridable in Settings → Advanced. Notebooks are TinyBase mergeable JSON in `~/Library/Application Support/Dump/Notebooks/<profile-id>.json` (atomic writes); the registry and settings live in UserDefaults (`connections`, `shortcut`, `webAppOrigin`), owner keys in the Keychain. Connect, switch and sign-in follow the web app's rules. The global hotkey (default ⇧⌘Space) uses Carbon `RegisterEventHotKey`, which needs no Accessibility permission. SIGTERM quits through the normal save path; start termination from the run loop, never from inside a main-queue block, because saving needs the main queue. The bundle embeds `src/core`: rebuild it when core or the API contract changes.
-
-Pending: actual-phone keyboard and share-surface evaluation, AI tagging, durable AI jobs, scheduled digest, email ingestion, R2 backup/restore, link unfurling, advanced gestures, and broader browser/device testing. Do not claim these are complete.
-
-Deploy a working increment after meaningful checks. Keep the access model (owner key per server) explicit in product and operations documentation.
+- `npm run check` runs the format check, lint, unit tests, type checks (client, Worker and Mac engine) and both builds. It does not build Swift.
+- Mac changes: run `npm run mac:engine && (cd mac && swift build && swift test)`. `swift test` builds only `DumpKit`, and the app embeds `mac/build/engine.js`, so rebuild the engine first.
+- `npm run dev` serves the web client on 6191 and the API on 6190. The dev owner key, `dump-local-development-owner-key`, is prefilled in the connect form. Abi usually has dev running: if `preview_start` reports 6191 is busy, open http://localhost:6191 directly. That notebook is Abi's local data, so remove any dumps you add while testing.
+- Deploy, push, tag, release or run `mac:install` only when Abi asks; see [docs/release.md](docs/release.md).
+- The toolchain is Vite+ (CLI `vp`). All Vite, Vitest, Oxlint and Oxfmt config lives in `vite.config.ts`, tests import from `vite-plus/test`, and `vite` resolves to `@voidzero-dev/vite-plus-core` through `overrides` in `package.json`. Oxfmt skips Markdown. Vite+ docs are in `node_modules/vite-plus/docs/` (`guide/`, `config/`).
+- TinyBase's API reference is the JSDoc, with examples, in `node_modules/tinybase/@types/<module>/index.d.ts`. There is an overview at https://tinybase.org/llms.txt.

@@ -43,6 +43,40 @@ struct EngineTests {
     try await engine.close()
   }
 
+  @Test func actsOnDumpsAndListsLikeTheWebApp() async throws {
+    let engine = try Engine(directory: directory)
+    try await engine.open(Profile(server: nil))
+    let idea = try engine.capture("an idea #later", list: nil)
+    let errand = try engine.capture("call the bank", list: "todo")
+    #expect(engine.snapshot()?.dumps.isEmpty == true)
+    #expect(try #require(engine.snapshot(full: true)).dumps.first { $0.id == idea.id }?.tags == ["later"])
+
+    try engine.file(idea.id, list: "ideas")
+    try engine.setDone(errand.id, true)
+    var dumps = try #require(engine.snapshot(full: true)).dumps
+    #expect(dumps.first { $0.id == idea.id }?.list == "ideas")
+    #expect(dumps.first { $0.id == errand.id }?.done == true)
+    #expect(throws: EngineError("That list no longer exists.")) { try engine.file(idea.id, list: "nope") }
+
+    let books = try engine.saveList(label: "Books", color: "#6395c3")
+    #expect(throws: EngineError("A list with that name already exists.")) {
+      try engine.saveList(label: "books", color: "#6395c3")
+    }
+    try engine.saveList(label: "Reading", color: "#849c74", id: books.id)
+    #expect(engine.snapshot()?.list(books.id)?.label == "Reading")
+    try engine.file(idea.id, list: books.id)
+    try engine.deleteList(books.id)
+    #expect(engine.snapshot()?.list(books.id) == nil)
+    dumps = try #require(engine.snapshot(full: true)).dumps
+    #expect(dumps.first { $0.id == idea.id }?.list == nil)
+
+    #expect(try engine.clearDone() == 1)
+    try engine.remove(idea.id)
+    #expect(engine.snapshot(full: true)?.dumps.isEmpty == true)
+    #expect(throws: EngineError("This dump is no longer in your notebook.")) { try engine.remove(idea.id) }
+    try await engine.close()
+  }
+
   // TinyBase hashes these bytes; every device must produce the same ones as a browser.
   @Test func textEncoderMatchesUTF8() throws {
     let engine = try Engine(directory: directory)
@@ -79,7 +113,11 @@ struct EngineTests {
 
   @Test func unreachableServerReportsANetworkFailure() async throws {
     let engine = try Engine(directory: directory)
-    await #expect(throws: EngineError("Could not reach this server. Check the address and that it is online.")) {
+    await #expect(
+      throws: EngineError(
+        "Could not reach this server. Check the address, that it is online, and that its ALLOWED_CLIENT_ORIGINS lists this app."
+      )
+    ) {
       _ = try await engine.inspect("http://localhost:9")
     }
     await #expect(throws: EngineError("Use HTTPS, or HTTP on localhost for development.")) {

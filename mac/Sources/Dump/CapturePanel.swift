@@ -6,6 +6,7 @@ import SwiftUI
 /// were in stays frontmost, as with Spotlight. Escape or clicking elsewhere dismisses it.
 final class CapturePanel: NSPanel {
   var onDismiss: (() -> Void)?
+  var onNotebook: (() -> Void)?
 
   init() {
     super.init(
@@ -28,6 +29,23 @@ final class CapturePanel: NSPanel {
 
   override func cancelOperation(_ sender: Any?) {
     onDismiss?()
+  }
+
+  // The main menu is for the notebook window. Here ⌘W closes the panel and ⌘O opens the
+  // notebook; quit, hide and minimize would act on an app you cannot see, so they do nothing.
+  // Everything else, editing included, goes on to the text box and the menu.
+  override func performKeyEquivalent(with event: NSEvent) -> Bool {
+    let flags = event.modifierFlags.intersection([.shift, .option, .command, .control])
+    guard flags == .command, let key = event.charactersIgnoringModifiers?.lowercased() else {
+      return super.performKeyEquivalent(with: event)
+    }
+    switch key {
+    case "w": onDismiss?()
+    case "o": onNotebook?()
+    case "q", "h", "m": break
+    default: return super.performKeyEquivalent(with: event)
+    }
+    return true
   }
 
   override func resignKey() {
@@ -56,11 +74,18 @@ final class CapturePanelController {
         self?.hide()
         self?.openSettings()
       },
+      onNotebook: { [weak self] in self?.openNotebook() },
       onSize: { [weak self] in self?.resize($0) })
     let hosting = NSHostingView(rootView: root)
     hosting.sizingOptions = []
     panel.contentView = hosting
     panel.onDismiss = { [weak self] in self?.hide() }
+    panel.onNotebook = { [weak self] in self?.openNotebook() }
+  }
+
+  private func openNotebook() {
+    hide()
+    model.showNotebook?()
   }
 
   var isVisible: Bool { panel.isVisible }
