@@ -6,13 +6,14 @@ Owns the deploy tasks under `run.tasks` in `vite.config.ts`, the routes in `wran
 
 - `npx vp run deploy:server` deploys the API Worker to `dump-api.abishrestha.com.np`, and `npx vp run deploy:client` deploys the static web app to `dump.abishrestha.com.np`. Both run lint, unit tests and type checks first. Prefix them with `CI=1` for plain output.
 - When a change touches the API contract (`src/shared/`, routes, the ping shape), deploy the server first, then the client, then rebuild the Mac app (`npm run mac:install`).
-- To verify, run `curl -H 'Origin: https://dump.abishrestha.com.np' https://dump-api.abishrestha.com.np/api/ping`. Without an allowed `Origin`, the server answers 403. `auth` must be `"owner-key"`.
+- To verify, run `curl -H 'Origin: https://dump.abishrestha.com.np' https://dump-api.abishrestha.com.np/api/ping`. Without an allowed `Origin`, the server answers 403. `auth` must be `"owner-key"`. To watch logs, run `npx wrangler tail`.
+- After a client deploy, open clients and installed PWAs pick up the new build through the app's update notice.
 - Never query a hostname before a deploy creates it. Abi's ISP resolver caches "does not exist" for about 30 minutes, which then breaks the browser and the Mac app. To check a new hostname, use `dig +short @1.1.1.1 <host>` and `curl --resolve <host>:443:<ip>`.
 - Secrets (`OWNER_KEY`, `JEV_API_KEY`) are set with `npx wrangler secret put` and are write-only: Cloudflare can't show them again. Abi types them in; don't print, search for or store them. `npx wrangler secret list` shows only their names.
 
 ## Release vX.Y.Z
 
-1. Commit to `main` and push there; this repo has no PR flow. Commit messages have an imperative subject, a wrapped body with a bullet list of what changed, and the Co-Authored-By trailer. Split unrelated work into separate commits, and run `npm run check` on each one.
+1. Work reaches `main` either by a direct push or through a PR, whichever Abi asks for; if it's unclear, ask. Commit messages have an imperative subject, a wrapped body with a bullet list of what changed, and the Co-Authored-By trailer. Split unrelated work into separate commits, and run `npm run check` on each one.
 2. Bump the version in both places, then commit as `Release vX.Y.Z`:
    ```bash
    npm version X.Y.Z --no-git-tag-version

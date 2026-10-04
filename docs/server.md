@@ -1,6 +1,6 @@
 # API server
 
-Owns `src/server/` and `wrangler.jsonc`. For the deployer-facing description of origins, the owner key and the security model, read README § Connect your own server, § Deploy your server and § Security model. This file holds what you need to change the server safely.
+Owns `src/server/` and `wrangler.jsonc`. For the deploy steps and security summary written for a fork's owner, read README § Deploy your server. This file holds what you need to change the server safely.
 
 ## Shape
 
