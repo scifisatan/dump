@@ -6,7 +6,7 @@
 
 A capture-first home for thoughts and links. Type something, press Enter, and it's saved. Organizing can wait, and with [Jev](docs/architecture.md#why-jev) switched on, Dump files things for you.
 
-Dump is local-first and built for one person. Every capture lands on your device right away, then syncs to your other devices through your own server: a single Cloudflare Durable Object. Everyone uses the same web app at **https://dump.abishrestha.com.np**, connected to their own server or kept on one device. A [Mac app](#mac-app) lets you capture from anywhere.
+Dump is local-first and built for one person. Every capture lands on your device right away, then syncs to your other devices through your own server: a single Cloudflare Durable Object. Everyone uses the same web app at **https://dump.abishrestha.com.np**, connected to their own server or kept on one device. A [Mac app](#mac-app) lets you capture from anywhere, and a [phone app](#phone-app) brings the notebook to iOS and Android.
 
 ## Using Dump
 
@@ -39,6 +39,19 @@ This needs Xcode with Swift 6, and Node. It builds `Dump.app`, puts it in `/Appl
 DUMP_SIGN_IDENTITY="Apple Development: Your Name (TEAMID)"
 ```
 
+## Phone app
+
+The app opens on your inbox with the composer ready: type and tap the arrow. Go back for your lists, Done, search and sync status. Tap a dump's circle to finish it, swipe right to mark it done, swipe left to remove it, or long-press for every action (open the link, move it to a list, copy). Like the Mac app, it runs the web app's own core, so it works offline, files with `!list`, lets Jev sort, and syncs with your server. Connect your server in Settings.
+
+```bash
+cd mobile && npm install
+```
+
+- **iPhone simulator:** `npm run ios`. This needs Xcode and CocoaPods.
+- **Your phone, through Expo Go:** run `npx expo start --go` in `mobile/` and scan the QR code with the Expo Go app. The phone must be able to reach this Mac, and the app runs only while that command does.
+- **Android:** build an APK as described in [docs/mobile.md](docs/mobile.md#build-and-check) and install it on the phone; Android asks you to allow installs from unknown sources. The Android build hasn't been tested on a device yet.
+- **Installing on an iPhone** needs signing. With a free Apple account, Xcode can install it on your own iPhone, but it stops opening after 7 days.
+
 ## Deploy your server
 
 You need a Cloudflare account (SQLite-backed Durable Objects work on the free plan) and Node.js 22.12+ with `npm install` done.
@@ -61,7 +74,7 @@ You need a Cloudflare account (SQLite-backed Durable Objects work on the free pl
 
 ### Security
 
-- Everything except `/api/ping` needs the owner key. Each device enters it once and stores it: in the browser's local storage, or in the Keychain on the Mac.
+- Everything except `/api/ping` needs the owner key. Each device enters it once and stores it: in the browser's local storage, in the Keychain on the Mac, or in the Keychain or Android Keystore on a phone.
 - Lost a device? Run `npx wrangler secret put OWNER_KEY` again with a new key. Every device is signed out, keeps its notes, and asks for the new key.
 - Your server answers only the web app origins listed in `ALLOWED_CLIENT_ORIGINS`. That is browser policy, not authentication; the owner key is what protects your notes.
 - Using the hosted app means trusting whoever deploys it, and anyone with access to your Cloudflare account can reach your notes. To avoid that, host the web app yourself: point `wrangler.client.jsonc` at your account and run `npx vp run deploy:client`, or publish the output of `npm run build:client` (`dist/client/`) to any static HTTPS host. Then add that origin to `ALLOWED_CLIENT_ORIGINS`.
@@ -89,4 +102,4 @@ Open http://localhost:6191. This runs the web client (port 6191) and a local API
 - Import only adds missing records, so it isn't a full disaster-recovery tool.
 - Formats can still change: there's no schema versioning before a stable release.
 
-Not built yet: list reordering, list archiving, AI tagging, durable server-side AI jobs, a scheduled digest, email capture, R2 backups, link previews, a share extension, Raycast and Android clients, and testing on a real phone.
+Not built yet: list reordering, list archiving, AI tagging, durable server-side AI jobs, a scheduled digest, email capture, R2 backups, link previews, a share extension, home screen widgets, a Raycast client, and testing the phone app on a real phone.

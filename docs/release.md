@@ -1,6 +1,6 @@
 # Deploy and release
 
-Owns the deploy tasks under `run.tasks` in `vite.config.ts`, the routes in `wrangler.jsonc` and `wrangler.client.jsonc`, and the version in `mac/Info.plist`. Everything here publishes or installs something, so do it only when Abi asks. For a fork's deploy guide, read README § Deploy your server.
+Owns the deploy tasks under `run.tasks` in `vite.config.ts`, the routes in `wrangler.jsonc` and `wrangler.client.jsonc`, and the versions in `mac/Info.plist` and `mobile/package.json`. Everything here publishes or installs something, so do it only when Abi asks. For a fork's deploy guide, read README § Deploy your server.
 
 ## Deploy
 
@@ -14,12 +14,15 @@ Owns the deploy tasks under `run.tasks` in `vite.config.ts`, the routes in `wran
 ## Release vX.Y.Z
 
 1. Work reaches `main` either by a direct push or through a PR, whichever Abi asks for; if it's unclear, ask. Commit messages have an imperative subject, a wrapped body with a bullet list of what changed, and the Co-Authored-By trailer. Split unrelated work into separate commits, and run `npm run check` on each one.
-2. Bump the version in both places, then commit as `Release vX.Y.Z`:
+2. Bump the version in all three places, then commit as `Release vX.Y.Z`. The phone app's `app.json` takes its version from `mobile/package.json`.
    ```bash
    npm version X.Y.Z --no-git-tag-version
    ```
    ```bash
    plutil -replace CFBundleShortVersionString -string X.Y.Z mac/Info.plist
+   ```
+   ```bash
+   npm --prefix mobile version X.Y.Z --no-git-tag-version
    ```
    `build-app.sh` sets `CFBundleVersion` to the commit hash at build time.
 3. Deploy, server first (see above), then run `npm run mac:install`.

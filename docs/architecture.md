@@ -132,6 +132,25 @@ mac/                   menu bar app (Swift); see docs/mac.md
 ├── Sources/Dump/      AppKit/SwiftUI shell: hotkey, capture panel, notebook window, settings, menu bar
 ├── Sources/dump-check/  headless sync check against a running server
 └── scripts/           build-app.sh (build, sign, --install) and the icon renderer
+mobile/                iOS and Android app (Expo, React Native); its own npm package; see docs/mobile.md
+├── index.ts           loads the runtime shims, then the app
+├── app.json           Expo config: names, bundle IDs, icons, splash, plugins
+├── metro.config.js    bundles ../src/core and ../src/shared with this app's packages
+├── assets/            app icon, Android adaptive icon layers, splash
+└── src/
+    ├── runtime.ts     web APIs Hermes lacks, and the Origin header on server requests
+    ├── origin.ts      the web app origin presented to servers, and its override
+    ├── platform.ts    ClientPlatform: SQLite, app state, network
+    ├── profiles.ts    saved notebooks (key-value store) and owner keys (Keychain, Keystore)
+    ├── notebook.ts    the open notebook: launch, switch, connect, sign in
+    ├── views.ts       pure view helpers: places, day rows, search, labels
+    ├── App.tsx        native stack navigation
+    ├── screens/       Home, Notebook (a view), ListEditor, SortInbox, Settings
+    ├── DumpRow.tsx    a dump: done circle, swipe actions, context menu
+    ├── Composer.tsx   capture field pinned above the keyboard
+    ├── menu.tsx       native menus, with an action sheet in Expo Go
+    ├── ui.tsx         icons, sections, buttons, header items
+    └── theme.ts       light and dark colors from the web app
 tests/                 Vitest unit tests + Playwright e2e
 public/                _headers (CSP), theme-init.js, icons
 docs/                  notes for coding agents, one per area (see AGENTS.md)
@@ -154,8 +173,9 @@ The client and Worker compile separately (`tsconfig.client.json`, `tsconfig.json
 | **Latest change wins, including offline edits** | The owner uses one device at a time. Precedence rules and revision checks would add complexity with no real benefit here. | A stale offline device can overwrite a newer change to the same dump. |
 | **No undo** | Done, filing, and remove are final. Earlier undo logic could restore unrelated fields and conflicted with sync. | Mistakes are fixed by hand. Removal has a confirm step where it matters (Clear done, delete list). |
 | **Validate on read, not on the server** | The sync server relays rows it doesn't understand, which keeps it simple. Clients use Zod to reject malformed data. | A bad row is skipped rather than rejected at the source. |
-| **One hosted app, a server per person** | The web app is static files that one host serves to everyone; each person's server is one Worker and DO. Either half redeploys alone, and future Raycast/Android clients use the same API. `npm run dev` still starts both. Zod schemas in `src/shared` are the API contract both sides check. | Two deploys, and every client origin must be listed in `ALLOWED_CLIENT_ORIGINS`. The server is tied to Cloudflare's runtime. |
+| **One hosted app, a server per person** | The web app is static files that one host serves to everyone; each person's server is one Worker and DO. Either half redeploys alone, and the Mac and phone apps (and a future Raycast client) use the same API. `npm run dev` still starts both. Zod schemas in `src/shared` are the API contract both sides check. | Two deploys, and every client origin must be listed in `ALLOWED_CLIENT_ORIGINS`. The server is tied to Cloudflare's runtime. |
 | **The Mac app runs the web core** | JavaScriptCore runs the same TypeScript client core, so sync, filing, and merge rules can't drift from the web app; Swift supplies only the platform (timers, HTTP, WebSocket, files, Keychain). | A small set of web API polyfills to maintain, and the app must be rebuilt when the core changes. |
+| **The phone app is React Native running the web core** | Hermes runs the same TypeScript core, so the phone follows the same sync and filing rules, while native navigation, menus, gestures and keyboard handling give it the feel that the PWA and a Capacitor wrapper lacked. | A fourth build (Expo, Metro, CocoaPods, Gradle) with its own dependencies and runtime shims, a second UI to keep in step with the web, and iOS installs need signing. |
 | **One owner key, not accounts** | Each server belongs to one person, so a single generated secret covers every device with no sign-up, cookies, or session store. Tokens work across sites, where cookies would not. | Cutting off one lost device means rotating the key and entering the new one on the others. See [Security](../README.md#security). |
 
 ## Why Jev

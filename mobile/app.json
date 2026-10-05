@@ -1,0 +1,39 @@
+{
+  "expo": {
+    "name": "Dump",
+    "slug": "dump",
+    "scheme": "dump",
+    "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "userInterfaceStyle": "automatic",
+    "backgroundColor": "#f7f7f5",
+    "ios": {
+      "bundleIdentifier": "np.com.abishrestha.dump",
+      "supportsTablet": false,
+      "config": { "usesNonExemptEncryption": false }
+    },
+    "android": {
+      "package": "np.com.abishrestha.dump",
+      "adaptiveIcon": {
+        "backgroundColor": "#d8ee79",
+        "foregroundImage": "./assets/android-icon-foreground.png",
+        "monochromeImage": "./assets/android-icon-monochrome.png"
+      },
+      "predictiveBackGestureEnabled": true
+    },
+    "plugins": [
+      "expo-sqlite",
+      "expo-secure-store",
+      "expo-web-browser",
+      [
+        "expo-splash-screen",
+        {
+          "image": "./assets/splash-icon.png",
+          "imageWidth": 88,
+          "backgroundColor": "#f7f7f5",
+          "dark": { "backgroundColor": "#191b17" }
+        }
+      ]
+    ]
+  }
+}

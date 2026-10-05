@@ -13,10 +13,11 @@ These are the anti-slop principles from dmmulroy/anti-slop. They are vendored an
 
 ## Layers
 
-- `src/core` and `src/shared` import no React and no Worker types, and use only the web APIs that `mac/engine/polyfills.ts` installs. That rules out `window`, `document`, `localStorage`, `indexedDB` and `navigator`. Because `mac/engine/tsconfig.json` includes the DOM types, the type checker won't catch this, so the reviewer has to.
+- `src/core` and `src/shared` import no React and no Worker types, and use only the web APIs that `mac/engine/polyfills.ts` installs and `mobile/src/runtime.ts` provides. That rules out `window`, `document`, `localStorage`, `indexedDB` and `navigator`. Because `mac/engine/tsconfig.json` includes the DOM types, the type checker won't catch this, so the reviewer has to.
 - Browser code imports `src/shared`, never anything under `src/server/`.
 - Only the command functions in `src/core/client.ts` write dumps or lists. A store write anywhere else is a finding.
 - Swift calls the engine (`mac/engine/index.ts`) for notebook behavior. Notebook logic reimplemented in Swift is a finding.
+- The phone app calls the core's commands. Notebook logic reimplemented under `mobile/` is a finding.
 
 ## Tests
 
@@ -34,7 +35,7 @@ These match "Keeping docs true" in AGENTS.md.
 
 - For each changed path, find the row in AGENTS.md's docs map that owns it. If the diff changes a rule, command, gotcha or behavior that the owning doc (or README) describes, and that doc isn't updated in the same diff, it's a finding.
 - A doc line the diff makes false is a finding, wherever it is.
-- A file under `src/` or `mac/` that is added, removed or renamed without a matching update to the code map in `docs/architecture.md` is a finding.
+- A file under `src/`, `mac/` or `mobile/` that is added, removed or renamed without a matching update to the code map in `docs/architecture.md` is a finding.
 - A fact restated in a second file, instead of linked to its owning doc, is a finding.
 - A new rule in a doc needs a test named next to it, or a note that no test can check it.
 - History words in docs ("now", "former", "first pass", "no longer") are a finding: the line should state the present.

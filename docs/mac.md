@@ -17,7 +17,7 @@ Owns `mac/`. For how a user installs and uses the app, read README § Mac app. T
 
 ## Polyfills
 
-- `src/core` may use only what `polyfills.ts` provides: the `install(...)` calls plus the core-js imports at the top of the file. When the core needs more, add a polyfill there.
+- `src/core` may use only what `polyfills.ts` provides: the `install(...)` calls plus the core-js imports at the top of the file. When the core needs more, add a polyfill there, and in the phone app's runtime if Hermes lacks it ([mobile.md](mobile.md#runtime)).
 - `fetch` supports what the core uses: string bodies, and no caching, cookies or redirects.
 - `TextEncoder` must match browsers byte for byte, because TinyBase hashes its output. → `EngineTests.swift` `textEncoderMatchesUTF8`
 

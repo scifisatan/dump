@@ -14,8 +14,8 @@ Owns `src/shared/` and `src/core/`. These are the platform-independent parts tha
   - `connection.ts`: server URL validation, identity checks, tickets, storage names and error messages.
   - `server-link.ts`: one server over fetch and WebSocket. The browser and the Mac app share it.
   - `classify.ts`: the HTTP client for `/api/classify`.
-- Platforms plug in through `ClientPlatform` in `client.ts`. The browser adapter is `src/client/browser-platform.ts` and the Mac adapter is `mac/engine/platform.ts`. Persistence, tab sync and device events are adapter concerns. Keep this boundary, because future Raycast or Android clients would plug in the same way.
-- `src/core` also runs in JavaScriptCore, so it may use only the APIs that `mac/engine/polyfills.ts` installs. See [mac.md](mac.md#polyfills).
+- Platforms plug in through `ClientPlatform` in `client.ts`. The browser adapter is `src/client/browser-platform.ts`, the Mac adapter is `mac/engine/platform.ts` and the phone adapter is `mobile/src/platform.ts`. Persistence, tab sync and device events are adapter concerns. Keep this boundary, because a future Raycast client would plug in the same way.
+- `src/core` also runs in the Mac's JavaScriptCore and the phone app's Hermes, so it may use only the APIs that `mac/engine/polyfills.ts` installs and `mobile/src/runtime.ts` provides. See [mac.md](mac.md#polyfills) and [mobile.md](mobile.md#runtime).
 
 ## Data model
 
@@ -35,7 +35,7 @@ Owns `src/shared/` and `src/core/`. These are the platform-independent parts tha
 
 ## Commands
 
-The notebook changes only through the commands `createDumpClient` returns: `capture(raw, list)`, `setDone`, `file`, `remove`, `saveList`, `deleteList`, `clearDone`, `importDumps`, `backup`, `syncNow` and `reconnect`. The Mac engine wraps the same commands.
+The notebook changes only through the commands `createDumpClient` returns: `capture(raw, list)`, `setDone`, `file`, `remove`, `saveList`, `deleteList`, `clearDone`, `importDumps`, `backup`, `syncNow` and `reconnect`. The Mac engine wraps the same commands, and the phone app calls them directly.
 
 - `capture` writes to the store synchronously and returns the dump. A `!list` prefix wins over the chosen `list`. A dump filed at capture gets `classified_by: 'user'`; an unfiled one is handed to `autoFile` on the next tick. → `tests/client.test.ts` "captures into the chosen list without asking Jev"
 - `file` (including filing back to the inbox with `null`) records `classified_by: 'user'`, so Jev leaves that dump alone.
@@ -59,7 +59,7 @@ The notebook changes only through the commands `createDumpClient` returns: `capt
 - A device-only notebook never syncs or files, and its sync state is `local`. Connecting it to a server later merges its data into that server's notebook.
 - A refused owner key puts sync in `signed-out`, with no retries, until `reconnect()` runs after a new key is verified. → `tests/client.test.ts` "a refused key signs out"
 - Switching profiles flushes storage, stops sync, listeners, retries and AI, then reloads. A failed flush blocks the switch. Other tabs keep their old profile until they reload.
-- Owner keys are stored outside the profile registry, by the platform: browser localStorage on the web, the Keychain on the Mac.
+- Owner keys are stored outside the profile registry, by the platform: browser localStorage on the web, the Keychain on the Mac, and the Keychain or Android Keystore on a phone.
 
 ## Known risk: capture cost grows with the data
 

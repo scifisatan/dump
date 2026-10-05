@@ -1,0 +1,14 @@
+{
+  "extends": "expo/tsconfig.base",
+  "compilerOptions": {
+    "strict": true,
+    // The shared core under ../src types against this app's TinyBase and Zod, the copies Metro
+    // bundles (metro.config.js), not the web app's.
+    "paths": {
+      "tinybase": ["./node_modules/tinybase/@types/index.d.ts"],
+      "tinybase/*": ["./node_modules/tinybase/@types/*"],
+      "zod": ["./node_modules/zod/index.d.cts"]
+    }
+  },
+  "include": ["index.ts", "src", "../src/core", "../src/shared"]
+}

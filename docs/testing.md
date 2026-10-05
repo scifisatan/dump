@@ -10,6 +10,7 @@ Owns `tests/` and `playwright.config.ts`. The Mac tests are covered in [mac.md](
   - `tests/connection.test.ts`: server URLs, the ping shape, identity pinning, storage names, origins and error messages.
   - `tests/auth.test.ts`: owner keys and sync tickets.
   - `tests/classify.test.ts`: Jev request and response mapping.
+  - `tests/mobile-views.test.ts`: the phone app's view helpers (`mobile/src/views.ts`): day rows for its inverted list, and search.
 - Test through public interfaces with fakes passed in. See [CODING_STANDARDS.md](../CODING_STANDARDS.md) for the no-module-mocks rule.
 
 ## End-to-end tests
