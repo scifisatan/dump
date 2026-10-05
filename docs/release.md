@@ -26,15 +26,18 @@ Owns the deploy tasks under `run.tasks` in `vite.config.ts`, the routes in `wran
    ```
    `build-app.sh` sets `CFBundleVersion` to the commit hash at build time.
 3. Deploy, server first (see above), then run `npm run mac:install`.
-4. Zip the app:
+4. Zip the Mac app, and build the Android APK ([mobile.md](mobile.md#build-and-check) has the Java and SDK setup). Prebuild again after the bump, so the APK carries the new version:
    ```bash
    ditto -c -k --sequesterRsrc --keepParent mac/build/Dump.app Dump-X.Y.Z-mac.zip
+   ```
+   ```bash
+   (cd mobile && CI=1 npx expo prebuild -p android --no-install) && (cd mobile/android && ./gradlew assembleRelease) && cp mobile/android/app/build/outputs/apk/release/app-release.apk Dump-X.Y.Z-android.apk
    ```
 5. Tag and publish:
    ```bash
    git tag -a vX.Y.Z -m "Dump vX.Y.Z" && git push origin vX.Y.Z
    ```
    ```bash
-   gh release create vX.Y.Z Dump-X.Y.Z-mac.zip --title "Dump vX.Y.Z" --notes-file notes.md
+   gh release create vX.Y.Z Dump-X.Y.Z-mac.zip Dump-X.Y.Z-android.apk --title "Dump vX.Y.Z" --notes-file notes.md
    ```
-   Write the notes in sections: what changed in the web app and server, what changed in the Mac app, and Upgrading. Say that the zip is not notarized, so macOS asks the user to choose Open Anyway in System Settings → Privacy & Security, and that building from source with `npm run mac:install` is the recommended path.
+   Write the notes in sections: what changed in the web app and server, in the Mac app and in the phone app, and Upgrading. Say that the zip is not notarized, so macOS asks the user to choose Open Anyway in System Settings → Privacy & Security, and that building from source with `npm run mac:install` is the recommended path. Say that the APK is sideloaded (Android asks to allow installs from unknown sources) and that there is no iPhone download: installing on an iPhone needs signing, so iPhone users build it themselves or use Expo Go ([README § Phone app](../README.md#phone-app)).
