@@ -26,12 +26,12 @@ Owns the deploy tasks under `run.tasks` in `vite.config.ts`, the routes in `wran
    ```
    `build-app.sh` sets `CFBundleVersion` to the commit hash at build time.
 3. Deploy, server first (see above), then run `npm run mac:install`.
-4. Zip the Mac app, and build the Android APK ([mobile.md](mobile.md#build-and-check) has the Java and SDK setup). Prebuild again after the bump, so the APK carries the new version:
+4. Zip the Mac app, and build the Android APK ([mobile.md](mobile.md#build-and-check) has the Java and SDK setup). Prebuild again after the bump, so the APK carries the new version. Building only for arm64, which current Android phones use, keeps the APK near 37 MB instead of 100 MB:
    ```bash
    ditto -c -k --sequesterRsrc --keepParent mac/build/Dump.app Dump-X.Y.Z-mac.zip
    ```
    ```bash
-   (cd mobile && CI=1 npx expo prebuild -p android --no-install) && (cd mobile/android && ./gradlew assembleRelease) && cp mobile/android/app/build/outputs/apk/release/app-release.apk Dump-X.Y.Z-android.apk
+   (cd mobile && CI=1 npx expo prebuild -p android --no-install) && (cd mobile/android && ./gradlew assembleRelease -PreactNativeArchitectures=arm64-v8a) && cp mobile/android/app/build/outputs/apk/release/app-release.apk Dump-X.Y.Z-android.apk
    ```
 5. Tag and publish:
    ```bash
