@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { parseDue } from './due';
 
 export const LISTS = [
   { id: 'ideas', label: 'Ideas', color: '#9b84d6' },
@@ -43,6 +44,9 @@ export const dumpSchema = z
       .url()
       .refine((url) => /^https?:\/\//i.test(url))
       .nullable(),
+    // The day the dump is for (src/shared/due.ts), or null. Dumps saved before days existed have
+    // no `due` and read as undated; the next edit writes it.
+    due: z.iso.date().nullable().default(null),
     done: z.boolean(),
     deleted: z.boolean(),
     created_at: z.number().int().nonnegative(),
@@ -82,13 +86,15 @@ export function listPrefix(raw: string, lists: Collection[] = DEFAULT_LISTS) {
 }
 
 // `chosen` is the list the owner is capturing into; a `!list` prefix wins over it. A chosen list
-// that no longer exists is ignored, so the thought is still captured, unfiled.
+// that no longer exists is ignored, so the thought is still captured, unfiled. `due` is the day
+// the owner settled on while typing (null for none); left out, it is read from the text.
 export function makeDump(
   raw: string,
   id = crypto.randomUUID(),
   now = Date.now(),
   lists: Collection[] = DEFAULT_LISTS,
   chosen: ListId | null = null,
+  due?: string | null,
 ): Dump {
   let text = raw.trim();
   const prefix = listPrefix(text, lists);
@@ -117,6 +123,7 @@ export function makeDump(
     list,
     tags,
     url,
+    due: due === undefined ? parseDue(text, now) : due,
     done: false,
     deleted: false,
     created_at: now,

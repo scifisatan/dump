@@ -278,6 +278,24 @@ describe('dump and list actions', () => {
     await client.stop();
   });
 
+  it('moves a dump to another day, clears it, and keeps the day the composer showed', async () => {
+    const client = createDumpClient(platform({ deviceOnly: true }).adapter);
+    await client.start();
+    const dump = client.capture('submit my application by friday');
+    expect(dump.due).toMatch(/^\d{4}-\d{2}-\d{2}$/);
+    client.setDue(dump.id, '2026-11-02');
+    expect(find(client, dump.id)?.due).toBe('2026-11-02');
+    client.setDue(dump.id, null);
+    expect(find(client, dump.id)?.due).toBeNull();
+    expect(() => client.setDue(dump.id, 'friday')).toThrow();
+    expect(client.capture('lunch tomorrow', null, null).due).toBeNull();
+    client.remove(dump.id);
+    expect(() => client.setDue(dump.id, '2026-11-02')).toThrow(
+      'This dump is no longer in your notebook.',
+    );
+    await client.stop();
+  });
+
   it('records filing by hand and refuses removed dumps and deleted lists', async () => {
     const client = createDumpClient(platform({ deviceOnly: true }).adapter);
     await client.start();

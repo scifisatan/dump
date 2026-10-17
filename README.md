@@ -15,10 +15,11 @@ Open the web app and choose **Get started**. Then either connect your server (en
 | | |
 | --- | --- |
 | Capture | Type and press Enter. Shift+Enter adds a line, and `/` focuses the composer. |
+| Dates | Write the day in the dump: `submit the form by friday`, `dentist tomorrow`, `oct 24`, `in 3 days`. The composer shows the day before you send; its × sends the dump without one. Home is one list of everything, ending in **Today** just above the composer: what's overdue, due today and coming up, then what you dumped today. Scroll up for older dumps. Change or clear a day from the date on the card. The Mac and phone apps keep a dump's day but don't show it yet. |
 | File as you type | Start with `!list`. For example, `!buy warm floor lamp #reading` files to Buy and adds the tag `reading`. The default lists are `!ideas`, `!buy`, `!watch`, `!decor` and `!todo`; for list names with spaces, use hyphens: `!weekend-plans`. |
 | Auto-file | With Jev on, other dumps show "Sorting…", then move to Jev's pick, or to To do when Jev is unsure. If you file a dump first, your choice wins. |
-| Lists | Create them in the sidebar. Edit or delete one with the pencil in its header. |
-| Search | Ctrl/Cmd+K |
+| Lists | Open one from search (Ctrl/Cmd+K) or by tapping its name on a dump. Create one with **New list** in search; edit or delete one with the pencil in its header. |
+| Search | Ctrl/Cmd+K, or the search button beside Settings. Search also opens Today, Done and your lists. |
 | Sort the inbox | `1`–`9` pick a list, Right Arrow skips, Backspace removes. |
 | Done / remove | Final: there's no undo. |
 | Settings | Switch servers, sign in again after the owner key changes, and export or import a JSON backup. |

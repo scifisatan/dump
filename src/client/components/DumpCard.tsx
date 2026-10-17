@@ -1,7 +1,10 @@
-import { ArrowUpRight, Check, Circle, MoreHorizontal, Trash2 } from 'lucide-react';
+import { useState } from 'react';
+import { ArrowUpRight, CalendarDays, Check, Circle, MoreHorizontal, Trash2 } from 'lucide-react';
 import { differenceInHours, differenceInMinutes, format, isToday } from 'date-fns';
+import { dayKey } from '../../shared/due';
 import type { Collection, Dump } from '../../shared/schema';
 import { cn } from '../lib/utils';
+import { DueMenuItems, DuePicker, dueLabel } from './DueDate';
 import { ListDot } from './ListDot';
 import { Button } from './ui/button';
 import {
@@ -10,6 +13,9 @@ import {
   DropdownMenuItem,
   DropdownMenuLabel,
   DropdownMenuSeparator,
+  DropdownMenuSub,
+  DropdownMenuSubContent,
+  DropdownMenuSubTrigger,
   DropdownMenuTrigger,
 } from './ui/dropdown-menu';
 
@@ -17,6 +23,8 @@ export type DumpActions = {
   complete: (dump: Dump) => void;
   remove: (dump: Dump) => void;
   file: (dump: Dump, list: string | null) => void;
+  due: (dump: Dump, due: string | null) => void;
+  openList: (list: string) => void;
   tag: (tag: string) => void;
 };
 
@@ -43,8 +51,17 @@ export function DumpCard({
   // Jev is still choosing this dump's list.
   sorting?: boolean;
 }) {
+  const [picking, setPicking] = useState(false);
   const list = showList ? lists.find((item) => item.id === dump.list) : undefined;
-  const hasMeta = list || sorting || dump.tags.length > 0 || dump.url;
+  const overdue = !dump.done && dump.due !== null && dump.due < dayKey(Date.now());
+  const hasMeta = list || sorting || dump.due || dump.tags.length > 0 || dump.url;
+  const dueItems = (
+    <DueMenuItems
+      due={dump.due}
+      set={(due) => actions.due(dump, due)}
+      pick={() => setPicking(true)}
+    />
+  );
   return (
     <article className="group flex animate-card-in items-start gap-2.5 px-3.5 py-2.5 hover:bg-muted/40 max-phone:gap-2 max-phone:px-3">
       <button
@@ -65,11 +82,32 @@ export function DumpCard({
         </p>
         {hasMeta && (
           <div className="mt-1 flex flex-wrap items-center gap-2 text-[11px] text-muted-foreground">
+            {dump.due && (
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <button
+                    className={cn(
+                      'inline-flex items-center gap-1 rounded-[4px] px-1.5 py-0.25 hover:text-foreground',
+                      overdue ? 'bg-destructive/10 text-destructive' : 'bg-muted',
+                    )}
+                    aria-label={`${overdue ? 'Overdue' : 'Due'} ${dueLabel(dump.due)}: change date`}
+                  >
+                    <CalendarDays size={11} />
+                    {dueLabel(dump.due)}
+                  </button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="start">{dueItems}</DropdownMenuContent>
+              </DropdownMenu>
+            )}
             {list && (
-              <span className="flex items-center gap-1.25">
+              <button
+                className="flex items-center gap-1.25 hover:text-foreground"
+                aria-label={`Open ${list.label}`}
+                onClick={() => actions.openList(list.id)}
+              >
                 <ListDot color={list.color} className="size-1.5 min-w-1.5" />
                 {list.label}
-              </span>
+              </button>
             )}
             {sorting && !list && (
               <span className="flex items-center gap-1.25">
@@ -115,6 +153,14 @@ export function DumpCard({
           </Button>
         </DropdownMenuTrigger>
         <DropdownMenuContent align="end" className="min-w-48">
+          <DropdownMenuSub>
+            <DropdownMenuSubTrigger>
+              <CalendarDays />
+              {dump.due ? 'Change date' : 'Set a date'}
+            </DropdownMenuSubTrigger>
+            <DropdownMenuSubContent>{dueItems}</DropdownMenuSubContent>
+          </DropdownMenuSub>
+          <DropdownMenuSeparator />
           <DropdownMenuLabel>Move to</DropdownMenuLabel>
           <DropdownMenuItem onSelect={() => actions.file(dump, null)}>
             <ListDot />
@@ -138,6 +184,13 @@ export function DumpCard({
           </DropdownMenuItem>
         </DropdownMenuContent>
       </DropdownMenu>
+      {picking && (
+        <DuePicker
+          due={dump.due}
+          save={(due) => actions.due(dump, due)}
+          close={() => setPicking(false)}
+        />
+      )}
     </article>
   );
 }

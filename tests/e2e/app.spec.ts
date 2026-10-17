@@ -1,4 +1,5 @@
 import { expect, test, type Page } from '@playwright/test';
+import { openList } from './servers';
 
 test('a returning visitor opens the notebook at / under the CSP, without the landing page', async ({
   page,
@@ -91,7 +92,13 @@ test('prefix filing, search, export and additive restore work', async ({ page })
   await page.goto('/');
   await page.getByRole('textbox', { name: 'Capture a thought' }).fill(`!buy ${text}`);
   await page.getByRole('button', { name: 'Save dump', exact: true }).click();
-  await page.getByRole('navigation').getByRole('link', { name: /^Buy/ }).click();
+  // A card's list name opens that list.
+  await page
+    .getByRole('article')
+    .filter({ hasText: text })
+    .getByRole('button', { name: 'Open Buy' })
+    .click();
+  await expect(page.getByRole('heading', { level: 1 })).toHaveText('Buy');
   await expect(page.getByRole('article').getByText(text, { exact: true })).toBeVisible();
   await page.getByRole('button', { name: 'Search your space' }).click();
   await page.getByRole('combobox', { name: 'Search dumps' }).fill(text);
@@ -130,10 +137,10 @@ test('captures appear at once and Jev files them into a list afterwards', async 
   const card = page.getByRole('article').filter({ hasText: text });
   await expect(input).toHaveValue('');
   await expect(card).toContainText('Sorting…');
-  // The inbox shows every open dump alongside the list Jev chose.
+  // Home shows every open dump alongside the list Jev chose.
   await expect(card).toContainText('Buy');
   await expect(card).not.toContainText('Sorting…');
-  await page.getByRole('navigation').getByRole('link', { name: /^Buy/ }).click();
+  await card.getByRole('button', { name: 'Open Buy' }).click();
   await expect(page.getByRole('article').getByText(text, { exact: true })).toBeVisible();
 });
 
@@ -171,15 +178,23 @@ test('without Jev, captures stay in the inbox unfiled', async ({ page }) => {
   await page.waitForTimeout(500);
   await expect(card).not.toContainText('Sorting…');
   await expect(card).not.toContainText('To do');
+  // Every list gets a button, custom ones included, and number keys follow list order.
+  await page.getByRole('button', { name: 'Search your space' }).click();
+  const lists = await page
+    .locator('[cmdk-group]')
+    .filter({ has: page.getByText('Lists', { exact: true }) })
+    .getByRole('option')
+    .filter({ hasNotText: 'New list' })
+    .count();
+  await page.keyboard.press('Escape');
   await page.getByRole('button', { name: 'Sort inbox' }).click();
   const dialog = page.getByRole('dialog');
-  // Every list gets a button, custom ones included, and number keys follow list order.
-  const listLinks = page.getByRole('navigation').getByRole('link', { name: /^(?!Inbox|Done)/ });
   const listButtons = dialog
     .getByRole('button')
     .filter({ hasNot: page.getByText(/^(Remove|Skip|Close)$/) });
   await expect(dialog.getByRole('button', { name: /^Ideas/ })).toContainText('1');
-  expect(await listButtons.count()).toBeGreaterThanOrEqual(await listLinks.count());
+  expect(lists).toBeGreaterThanOrEqual(5);
+  expect(await listButtons.count()).toBeGreaterThanOrEqual(lists);
   // The count disappears once the last unfiled thought is sorted.
   const count = dialog.getByText(/thoughts? to give a home/);
   const remaining = async () =>
@@ -187,6 +202,56 @@ test('without Jev, captures stay in the inbox unfiled', async ({ page }) => {
   const before = await remaining();
   await page.keyboard.press('1');
   await expect.poll(remaining).toBe(before - 1);
+});
+
+test('Today shows what is overdue, due and coming up, and a day can move or clear', async ({
+  page,
+}) => {
+  const suffix = crypto.randomUUID().slice(0, 8);
+  const late = `pay the rent ${suffix} 2020-01-05`;
+  const due = `call the bank today ${suffix}`;
+  const plain = `lunch tomorrow ${suffix}`;
+  await page.goto('/');
+  await expect(page.getByRole('region', { name: 'Today', exact: true })).toBeVisible();
+  const input = page.getByRole('textbox', { name: 'Capture a thought' });
+  await expect(input).toBeEnabled();
+  await input.fill(late);
+  await input.press('Enter');
+  await input.fill(due);
+  // The composer shows the day it read before the dump is sent.
+  const skip = page.getByRole('button', { name: 'Dump without a date' });
+  await expect(page.locator('form').filter({ has: skip })).toContainText('Due Today');
+  await input.press('Enter');
+  await input.fill(plain);
+  await skip.click();
+  await expect(skip).toHaveCount(0);
+  await input.press('Enter');
+  const section = (name: string) => page.getByRole('region', { name, exact: true });
+  const card = (text: string) => page.getByRole('article').filter({ hasText: text });
+  await expect(section('Overdue').getByRole('article').filter({ hasText: late })).toBeVisible();
+  await expect(section('Due today').getByRole('article').filter({ hasText: due })).toBeVisible();
+  await expect(
+    section('Dumped today').getByRole('article').filter({ hasText: plain }),
+  ).toBeVisible();
+  await expect(card(plain).getByRole('button', { name: /change date$/ })).toHaveCount(0);
+  await page.screenshot({ path: 'test-results/today-desktop.png' });
+  await card(late)
+    .getByRole('button', { name: /^Overdue .*: change date$/ })
+    .click();
+  await page.getByRole('menuitem', { name: 'Tomorrow' }).click();
+  await expect(section('Coming up').getByRole('article').filter({ hasText: late })).toBeVisible();
+  await card(late)
+    .getByRole('button', { name: /change date$/ })
+    .click();
+  await page.getByRole('menuitem', { name: 'Clear date' }).click();
+  await expect(
+    section('Dumped today').getByRole('article').filter({ hasText: late }),
+  ).toBeVisible();
+  await page.reload();
+  await expect(
+    section('Dumped today').getByRole('article').filter({ hasText: late }),
+  ).toBeVisible();
+  await expect(section('Due today').getByRole('article').filter({ hasText: due })).toBeVisible();
 });
 
 test('clearing done removes every completed dump after a confirm click', async ({ page }) => {
@@ -233,7 +298,7 @@ test('live sync reaches an open device without polling', async ({ browser, reque
   await bContext.close();
 });
 
-test('mobile layout fits and navigation is usable', async ({ browser }) => {
+test('mobile layout fits and lists open from search and go back home', async ({ browser }) => {
   const context = await browser.newContext({
     viewport: { width: 390, height: 844 },
     isMobile: true,
@@ -243,12 +308,10 @@ test('mobile layout fits and navigation is usable', async ({ browser }) => {
   await page.goto('/');
   await expect(page.getByRole('textbox', { name: 'Capture a thought' })).toBeVisible();
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
-  await page.getByRole('button', { name: 'Open navigation' }).click();
-  await page
-    .getByRole('navigation')
-    .getByRole('link', { name: /^Ideas/ })
-    .click();
+  await openList(page, 'Ideas');
   await expect(page.getByRole('heading', { level: 1 })).toContainText('Ideas');
+  await page.getByRole('link', { name: 'Back to your space' }).click();
+  await expect(page.getByRole('heading', { level: 1 })).toHaveText('Your space');
   await context.close();
 });
 
@@ -261,7 +324,8 @@ test('custom lists, filing and renaming sync and survive reload', async ({ brows
   const thought = `Read something slow ${name}`;
   await a.goto('/');
   await b.goto('/');
-  await a.getByRole('button', { name: 'Create new list' }).click();
+  await a.getByRole('button', { name: 'Search your space' }).click();
+  await a.getByRole('option', { name: 'New list', exact: true }).click();
   await a.getByRole('textbox', { name: 'List name' }).fill(name);
   await a.getByRole('button', { name: 'Create list', exact: true }).click();
   await expect(a.getByRole('heading', { level: 1 })).toHaveText(new RegExp(name));
@@ -273,15 +337,12 @@ test('custom lists, filing and renaming sync and survive reload', async ({ brows
   await expect(a.getByRole('article').getByText(thought, { exact: true })).toBeVisible();
   // The composer moves from the centered empty state to the bottom and keeps focus.
   await expect(a.getByRole('textbox', { name: 'Capture a thought' })).toBeFocused();
-  const bLink = (label: string) =>
-    b.getByRole('navigation').getByRole('link', { name: new RegExp(`^${label}`) });
-  await bLink(name).click({ timeout: 20_000 });
+  await openList(b, name);
   await expect(b.getByRole('article').getByText(thought, { exact: true })).toBeVisible();
   await a.getByRole('button', { name: 'Edit list', exact: true }).click();
   await a.getByRole('textbox', { name: 'List name' }).fill(`${name} shelf`);
   await a.getByRole('button', { name: 'Save changes', exact: true }).click();
   await expect(b.getByRole('heading', { level: 1 })).toHaveText(`${name} shelf`);
-  await expect(bLink(`${name} shelf`)).toBeVisible();
   await a.reload();
   await expect(a.getByRole('heading', { level: 1 })).toHaveText(`${name} shelf`);
   await expect(a.getByRole('article').getByText(thought, { exact: true })).toBeVisible();
@@ -314,10 +375,10 @@ test('dialogs center, restore focus, and theme preference survives reload', asyn
   await page.reload();
   await expect(page.locator('html')).toHaveClass(/dark/);
   await expect(page.getByRole('textbox', { name: 'Capture a thought' })).toBeEnabled();
-  await page.screenshot({ path: 'test-results/inbox-dark.png', fullPage: true });
+  await page.screenshot({ path: 'test-results/home-dark.png', fullPage: true });
 });
 
-test('mobile inbox, sheet focus, reduced motion, and dialog fit', async ({ browser }) => {
+test('mobile home, dialog focus, reduced motion, and dialog fit', async ({ browser }) => {
   const context = await browser.newContext({
     viewport: { width: 390, height: 844 },
     isMobile: true,
@@ -326,15 +387,14 @@ test('mobile inbox, sheet focus, reduced motion, and dialog fit', async ({ brows
   });
   const page = await context.newPage();
   await page.goto('/');
-  await expect(page.getByRole('heading', { level: 1 })).toHaveText('Inbox');
+  await expect(page.getByRole('heading', { level: 1 })).toHaveText('Your space');
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
-  const trigger = page.getByRole('button', { name: 'Open navigation' });
+  const trigger = page.getByRole('button', { name: 'Settings', exact: true });
   await trigger.click();
   await expect(page.getByRole('dialog')).toBeVisible();
   await page.keyboard.press('Escape');
   await expect(trigger).toBeFocused();
   await trigger.click();
-  await page.getByRole('button', { name: 'Settings', exact: true }).click();
   const bounds = await page.getByRole('dialog').boundingBox();
   expect(bounds).not.toBeNull();
   expect(bounds!.x).toBeGreaterThanOrEqual(0);
@@ -343,7 +403,7 @@ test('mobile inbox, sheet focus, reduced motion, and dialog fit', async ({ brows
   expect(bounds!.y + bounds!.height).toBeLessThanOrEqual(844);
   await page.screenshot({ path: 'test-results/settings-mobile.png', fullPage: true });
   await page.keyboard.press('Escape');
-  await page.screenshot({ path: 'test-results/inbox-mobile.png' });
+  await page.screenshot({ path: 'test-results/home-mobile.png' });
   await context.close();
 });
 

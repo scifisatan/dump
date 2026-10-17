@@ -6,6 +6,12 @@ export const PEER = 'http://localhost:6193';
 // Matches tests/e2e/server.env.
 export const OWNER_KEY = 'e2e-owner-key-for-local-tests-only';
 
+// Opens a list from search, which lists every list.
+export async function openList(page: Page, label: string) {
+  await page.getByRole('button', { name: 'Search your space' }).click();
+  await page.getByRole('option', { name: label, exact: true }).click({ timeout: 20_000 });
+}
+
 export async function capture(page: Page, text: string) {
   await page.getByRole('textbox', { name: 'Capture a thought' }).fill(text);
   await page.getByRole('button', { name: 'Save dump', exact: true }).click();

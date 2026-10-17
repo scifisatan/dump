@@ -101,6 +101,7 @@ flowchart TB
 src/
 ├── shared/            imported by both client and Worker
 │   ├── schema.ts      Zod codecs for dumps, lists, backups; TinyBase table schema
+│   ├── due.ts         due days: read from a dump's text; how home groups dumps (agenda)
 │   ├── merge.ts       store factory, readRows (validated decode), sync tuning
 │   ├── classify.ts    Jev request/response mapping, threshold
 │   └── api.ts         response schemas for /api/ping and /api/sync-ticket
@@ -116,10 +117,10 @@ src/
 │   ├── profiles.ts    saved notebooks (server or device only) and owner keys
 │   ├── registry.ts    has this browser a notebook? decides what / shows
 │   ├── boot.ts        holds the loading screen until the notebook is ready
-│   ├── App.tsx        notebook shell: sidebar, views, composer
+│   ├── App.tsx        notebook shell: top bar, views, composer
 │   ├── Marketing.tsx  lazy landing page with onboarding
 │   ├── lib/           viewport.ts (phone keyboard), utils.ts
-│   └── components/    cards, search, onboarding, server settings; ui/ = shadcn/Radix
+│   └── components/    cards, due dates, search, onboarding, server settings; ui/ = shadcn/Radix
 └── server/            Cloudflare Worker, API only
     ├── index.ts       Hono routes, origin checks, owner-key checks, security headers, Jev proxy
     ├── auth.ts        owner key comparison and WebSocket tickets

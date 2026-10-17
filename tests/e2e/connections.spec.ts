@@ -44,7 +44,6 @@ test('a new visitor gets the landing page in place and onboards with a server', 
   await page.reload();
   await expect(page.getByRole('article').getByText(text, { exact: true })).toBeVisible();
   await page.setViewportSize({ width: 390, height: 844 });
-  await page.getByRole('button', { name: 'Open navigation' }).click();
   await page.getByRole('button', { name: 'Settings', exact: true }).click();
   await expect(page.getByText(`Current: ${HOME}`)).toBeVisible();
   await page.screenshot({ path: 'test-results/server-settings-mobile.png' });
@@ -61,6 +60,13 @@ test('a device-only notebook never contacts a server and can join one later', as
   await startOnboarding(page);
   await page.getByRole('button', { name: /Just this device/ }).click();
   await expect(page.getByRole('status')).toContainText('Saved on this device');
+  // A new notebook's empty Today offers dumps with days; one fills the composer.
+  await expect(page.getByText('A clear day.')).toBeVisible();
+  await page.screenshot({ path: 'test-results/today-empty-desktop.png' });
+  await page.getByRole('button', { name: 'Pay rent by friday' }).click();
+  await expect(page.getByRole('textbox', { name: 'Capture a thought' })).toHaveValue(
+    'Pay rent by friday',
+  );
   const text = `device only ${crypto.randomUUID().slice(0, 8)}`;
   await capture(page, `!ideas ${text}`);
   await expect(page.getByRole('article').getByText(text, { exact: true })).toBeVisible();

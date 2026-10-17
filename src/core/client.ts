@@ -312,11 +312,12 @@ export function createDumpClient(platform: ClientPlatform) {
 
   // Capture is synchronous and usually unfiled; Jev chooses the list afterwards (see autoFile).
   // An explicit !list prefix files it immediately, as does `list`, the list being captured into.
-  function capture(raw: string, list: ListId | null = null) {
+  // `due` is the day the composer showed (null for none); left out, it is read from the text.
+  function capture(raw: string, list: ListId | null = null, due?: string | null) {
     assertReady();
     if (raw.trim().length > TEXT_LIMIT)
       throw new Error(`A dump can be up to ${TEXT_LIMIT.toLocaleString('en-US')} characters.`);
-    const dump = makeDump(raw, crypto.randomUUID(), Date.now(), snapshot.lists, list);
+    const dump = makeDump(raw, crypto.randomUUID(), Date.now(), snapshot.lists, list, due);
     store.setRow('dumps', dump.id, { data: encodeDump(dump) });
     if (!dump.list) setTimeout(() => autoFile(dump.id), 0);
     return dump;
@@ -400,7 +401,7 @@ export function createDumpClient(platform: ClientPlatform) {
   // Callers use the commands below, which keep `classified_by` consistent with `needsList`.
   function write(
     id: string,
-    changes: Partial<Pick<Dump, 'list' | 'done' | 'deleted' | 'classified_by'>>,
+    changes: Partial<Pick<Dump, 'list' | 'due' | 'done' | 'deleted' | 'classified_by'>>,
   ) {
     assertReady();
     const previous = decodeDump(store.getCell('dumps', id, 'data'));
@@ -422,6 +423,11 @@ export function createDumpClient(platform: ClientPlatform) {
 
   function setDone(id: string, done: boolean) {
     write(existing(id), { done });
+  }
+
+  // Moves a dump to another day (YYYY-MM-DD), or takes its day away (null).
+  function setDue(id: string, due: string | null) {
+    write(existing(id), { due });
   }
 
   // Filing by hand, including back to the inbox (null), records the owner's choice, so Jev
@@ -528,6 +534,7 @@ export function createDumpClient(platform: ClientPlatform) {
     reconnect,
     capture,
     setDone,
+    setDue,
     file,
     remove,
     saveList,

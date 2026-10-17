@@ -8,15 +8,12 @@ import {
   type KeyboardEvent,
 } from 'react';
 import {
+  ArrowLeft,
   ArrowUp,
   Asterisk,
-  Check,
+  CalendarDays,
   CheckCheck,
-  Inbox,
-  LoaderCircle,
-  Menu,
   Pencil,
-  Plus,
   Search,
   Settings,
   Sparkles,
@@ -25,13 +22,15 @@ import {
 } from 'lucide-react';
 import { format, isToday, isYesterday, startOfDay } from 'date-fns';
 import { toast } from 'sonner';
-import { Link, NavLink, useLocation, useNavigate, useMatch } from 'react-router-dom';
+import { Link, useLocation, useNavigate, useMatch } from 'react-router-dom';
+import { agenda, parseDue } from '../shared/due';
 import type { Collection, Dump } from '../shared/schema';
 import { client, exportDumps, useDumpStore } from './store';
 import { cn } from './lib/utils';
 import { useVisualViewport } from './lib/viewport';
 import { Brand } from './components/Brand';
 import { DumpCard, type DumpActions } from './components/DumpCard';
+import { DraftDue, dueLabel } from './components/DueDate';
 import { ListDot } from './components/ListDot';
 import { ListEditor } from './components/ListEditor';
 import { SearchDialog } from './components/SearchDialog';
@@ -39,24 +38,14 @@ import { SettingsDialog } from './components/SettingsDialog';
 import { holdBoot } from './boot';
 import { TriageDialog } from './components/TriageDialog';
 import { Button } from './components/ui/button';
-import {
-  Sheet,
-  SheetContent,
-  SheetDescription,
-  SheetTitle,
-  SheetTrigger,
-} from './components/ui/sheet';
 
-const navItem =
-  'mb-0.75 flex min-h-10 w-full items-center gap-3 rounded-[8px] px-3 py-2 text-left text-[13px] text-muted-foreground max-phone:min-h-11';
-const navLink = ({ isActive }: { isActive: boolean }) =>
-  cn(navItem, isActive ? 'bg-secondary font-[550] text-secondary-foreground' : 'hover:bg-muted');
-const navCount = 'ml-auto text-[11px] font-normal opacity-80';
 const column = 'mx-auto w-full max-w-190 px-10 max-tablet:px-7 max-phone:px-3.5';
 // The composer is the main action, so it carries a lime-tinted edge and a lifted shadow.
 const composer =
   'border border-ring/50 bg-capture shadow-capture focus-within:border-ring focus-within:ring-4 focus-within:ring-ring/15';
 const hint = 'rounded-[3px] bg-secondary px-1 py-0.5 [font:inherit]';
+// Shown in an empty Today; each fills the composer, and its day shows before it is saved.
+const DAY_EXAMPLES = ['Call the bank tomorrow', 'Pay rent by friday', 'Book the dentist in 3 days'];
 
 function dayLabel(time: number) {
   if (isToday(time)) return 'Today';
@@ -86,8 +75,9 @@ export default function App() {
   const location = useLocation();
   const listMatch = useMatch('/lists/:id');
   const [draft, setDraft] = useState('');
+  // The day read from the draft that the owner chose not to use.
+  const [skippedDue, setSkippedDue] = useState<string | null>(null);
   const [fatal, setFatal] = useState('');
-  const [menuOpen, setMenuOpen] = useState(false);
   const [searchOpen, setSearchOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [settingsOpen, setSettingsOpen] = useState(false);
@@ -100,34 +90,59 @@ export default function App() {
   const shownCount = useRef(0);
   const refocus = useRef(false);
   const contentRef = useRef<HTMLDivElement>(null);
+  const todayRef = useRef<HTMLElement>(null);
   const atBottom = useRef(true);
+  // True while home is held at Today's heading: the bottom is followed again only once reached.
+  const atToday = useRef(false);
   useVisualViewport();
   const lists = state.lists.filter((list) => !list.deleted);
   const active = state.dumps.filter((dump) => !dump.deleted);
-  // The inbox shows every open dump with its list; `unfiled` only feeds Sort inbox, and leaves
-  // out dumps Jev is still sorting so the button does not flash after each capture.
+  // Home shows every open dump with its list; `unfiled` only feeds Sort inbox, and leaves out
+  // dumps Jev is still sorting so the button does not flash after each capture.
   const open = active.filter((dump) => !dump.done);
   const unfiled = open.filter((dump) => dump.list === null && !state.sorting.has(dump.id));
   const completed = active.filter((dump) => dump.done);
   const currentList = lists.find((list) => list.id === listMatch?.params.id);
   const done = location.pathname === '/done';
-  const isInbox = !done && !currentList;
-  const title = done ? 'Done' : (currentList?.label ?? 'Inbox');
+  // Home is the one list of every open dump, so a path that names no view shows it.
+  const isHome = !done && !currentList;
+  const title = done ? 'Done' : (currentList?.label ?? 'Your space');
   const selectedId = new URLSearchParams(location.search).get('item');
+  // Home: older undated dumps by day, then Today just above the composer.
+  const plan = agenda(open, Date.now());
+  const overdue = plan.overdue;
+  const dueToday = plan.due;
+  const todayGroups = [
+    { key: 'overdue', label: 'Overdue', dumps: plan.overdue },
+    { key: 'due', label: 'Due today', dumps: plan.due },
+    { key: 'upcoming', label: 'Coming up', dumps: plan.upcoming },
+    { key: 'dumped', label: 'Dumped today', dumps: plan.dumped },
+  ].filter((group) => group.dumps.length > 0);
+  const showToday = isHome && !selectedId;
+  const history = showToday ? plan.earlier : [];
   // Newest dumps sit at the bottom, next to the composer, like a chat.
-  const selected = active
-    .filter((dump) =>
-      selectedId
-        ? dump.id === selectedId
-        : done
-          ? dump.done
-          : currentList
-            ? dump.list === currentList.id && !dump.done
-            : !dump.done,
-    )
-    .reverse();
-  // An empty view centers a larger composer; otherwise it is pinned below the dumps.
-  const empty = state.ready && selected.length === 0;
+  const selected = showToday
+    ? [...history, ...todayGroups.flatMap((group) => group.dumps)]
+    : active
+        .filter((dump) =>
+          selectedId
+            ? dump.id === selectedId
+            : done
+              ? dump.done
+              : currentList
+                ? dump.list === currentList.id && !dump.done
+                : !dump.done,
+        )
+        .reverse();
+  const groups = byDay(showToday ? history : selected).map(({ day, dumps }) => ({
+    key: String(day),
+    label: dayLabel(day),
+    dumps,
+  }));
+  const draftDue = parseDue(draft, Date.now());
+  const shownDue = draftDue === skippedDue ? null : draftDue;
+  // An empty list or Done centers a larger composer; home always ends in Today, so it pins it.
+  const empty = state.ready && selected.length === 0 && !showToday;
   // Done is a record of finished dumps, not a place to capture new ones.
   const composing = !done;
 
@@ -148,7 +163,6 @@ export default function App() {
     function shortcut(event: globalThis.KeyboardEvent) {
       if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === 'k') {
         event.preventDefault();
-        setMenuOpen(false);
         setSearchQuery('');
         setSearchOpen((open) => !open);
         return;
@@ -169,11 +183,25 @@ export default function App() {
   useLayoutEffect(() => {
     shownCount.current = 0;
     atBottom.current = true;
+    atToday.current = false;
   }, [location.pathname, location.search]);
   useLayoutEffect(() => {
     const scroller = scrollRef.current;
     const count = state.ready ? selected.length : 0;
-    if (scroller && count > shownCount.current) scroller.scrollTop = scroller.scrollHeight;
+    if (scroller && count > shownCount.current) {
+      // Home opens with Today's heading at the top when Today is taller than the screen, so
+      // overdue dumps are in view; otherwise the browser stops at the bottom.
+      const bottom = scroller.scrollHeight - scroller.clientHeight;
+      const today = shownCount.current === 0 ? todayRef.current : null;
+      const top = today
+        ? today.getBoundingClientRect().top -
+          scroller.getBoundingClientRect().top +
+          scroller.scrollTop
+        : bottom;
+      scroller.scrollTop = Math.min(top, bottom);
+      atToday.current = top < bottom;
+      atBottom.current = !atToday.current;
+    }
     shownCount.current = count;
     // The composer moves when a view gains or loses its first dump; keep focus with it.
     if (refocus.current) {
@@ -217,6 +245,8 @@ export default function App() {
         dump.done ? 'Marked incomplete' : 'A little less to do',
       ),
     remove: (dump) => act(() => client.remove(dump.id), 'Dump removed'),
+    due: (dump, due) =>
+      act(() => client.setDue(dump.id, due), due ? `Moved to ${dueLabel(due)}` : 'Date cleared'),
     file: (dump, list) =>
       act(
         () => client.file(dump.id, list),
@@ -224,6 +254,7 @@ export default function App() {
           ? `Filed in ${lists.find((item) => item.id === list)?.label ?? 'your list'}`
           : 'Moved to inbox',
       ),
+    openList: (list) => navigate(`/lists/${list}`),
     tag: (tag) => {
       setSearchQuery(`#${tag}`);
       setSearchOpen(true);
@@ -233,35 +264,29 @@ export default function App() {
     event?.preventDefault();
     if (!draft.trim() || !state.ready) return;
     try {
-      // A list's composer files into that list; a `!list` prefix still wins.
-      const dump = client.capture(draft, currentList?.id ?? null);
+      // A list's composer files into that list; a `!list` prefix still wins. The dump gets the
+      // day the composer showed.
+      const dump = client.capture(draft, currentList?.id ?? null, shownDue);
       setDraft('');
+      setSkippedDue(null);
       refocus.current = true;
       if (dump.list && dump.list !== currentList?.id)
         toast(`Captured in ${lists.find((list) => list.id === dump.list)?.label ?? 'your list'}`);
-      else if (!dump.list && !isInbox) toast('Captured in your inbox');
+      else if (!dump.list && currentList) toast('Captured in your inbox');
     } catch (error) {
       toast.error(error instanceof Error ? error.message : 'Could not capture this dump.');
     }
   }
-  function newList() {
-    setMenuOpen(false);
-    setEditor({});
-  }
   function openSearch() {
-    setMenuOpen(false);
     setSearchQuery('');
     setSearchOpen(true);
   }
-  const syncPhase =
-    state.storageError ||
+  // Sync shows only when it needs attention: offline, paused, signed out or unable to save.
+  const syncProblem =
+    !!state.storageError ||
     state.sync === 'offline' ||
     state.sync === 'error' ||
-    state.sync === 'signed-out'
-      ? 'problem'
-      : state.saving || (state.sync !== 'synced' && state.sync !== 'local')
-        ? 'busy'
-        : 'ok';
+    state.sync === 'signed-out';
   const syncText = state.storageError
     ? 'Storage needs attention'
     : state.saving
@@ -295,103 +320,61 @@ export default function App() {
       }
     },
   };
-  const status = (
+  // Screen readers always hear the sync state; it shows beside Settings only when it needs
+  // attention, and the gear carries a dot.
+  const status = syncProblem ? (
     <span
-      className={cn(
-        'flex h-8 shrink-0 items-center gap-1.5 rounded-full px-2 text-[11px]',
-        syncPhase === 'problem' ? 'bg-destructive/10 text-destructive' : 'text-muted-foreground',
-      )}
+      className="flex h-8 min-w-0 shrink items-center gap-1.5 rounded-full bg-destructive/10 px-2.5 text-[11px] text-destructive"
       role="status"
       title={syncText}
     >
-      {syncPhase === 'busy' ? (
-        <LoaderCircle size={16} className="animate-spin" />
-      ) : syncPhase === 'ok' ? (
-        <Check size={16} className="text-accent-foreground" />
-      ) : (
-        <X size={16} />
-      )}
-      <span className={syncPhase === 'problem' ? 'max-phone:sr-only' : 'sr-only'}>{syncText}</span>
+      <span className="truncate">{syncText}</span>
       {state.sync === 'error' && (
-        <button className="font-medium underline" onClick={() => void client.syncNow()}>
+        <button className="shrink-0 font-medium underline" onClick={() => void client.syncNow()}>
           Retry
         </button>
       )}
       {state.sync === 'signed-out' && (
-        <button className="font-medium underline" onClick={() => setSettingsOpen(true)}>
+        <button className="shrink-0 font-medium underline" onClick={() => setSettingsOpen(true)}>
           Sign in
         </button>
       )}
     </span>
+  ) : (
+    <span className="sr-only" role="status">
+      {syncText}
+    </span>
   );
 
-  const navigation = (
-    <>
-      <Link to="/" className="self-start" onClick={() => setMenuOpen(false)} aria-label="Dump home">
-        <Brand />
-      </Link>
-      <button
-        className={cn(navItem, 'mt-7 mb-3 border bg-card hover:bg-muted')}
-        onClick={openSearch}
-        aria-label="Search your space"
-      >
-        <Search size={17} />
-        <span>Search</span>
-        <kbd className="ml-auto max-phone:hidden">⌘K</kbd>
-      </button>
-      <nav aria-label="Main navigation">
-        <NavLink end to="/" className={navLink} onClick={() => setMenuOpen(false)}>
-          <Inbox size={18} />
-          <span className="truncate">Inbox</span>
-          {open.length > 0 && <span className={navCount}>{open.length}</span>}
-        </NavLink>
-        <div className="mt-6 mb-1.25 flex items-center justify-between pl-3 text-[9px] tracking-[1.3px] text-muted-foreground">
-          <span>YOUR LISTS</span>
-          <Button
-            variant="ghost"
-            size="icon"
-            className="size-7"
-            aria-label="Create new list"
-            onClick={newList}
-            disabled={!state.ready}
-          >
-            <Plus size={16} />
-          </Button>
+  function dumpGroup(
+    { key, label, dumps }: { key: string; label: string; dumps: Dump[] },
+    Heading: 'h2' | 'h3',
+  ) {
+    return (
+      <section key={key} aria-label={label}>
+        <Heading
+          className={cn(
+            'mb-2 px-1 text-[9px] tracking-[1.3px] uppercase',
+            key === 'overdue' ? 'text-destructive' : 'text-muted-foreground',
+          )}
+        >
+          {label}
+        </Heading>
+        <div className="divide-y overflow-hidden rounded-[12px] border bg-card shadow-soft">
+          {dumps.map((dump) => (
+            <DumpCard
+              key={dump.id}
+              dump={dump}
+              lists={lists}
+              actions={actions}
+              sorting={state.sorting.has(dump.id)}
+              showList={!currentList}
+            />
+          ))}
         </div>
-        {lists.map((list) => {
-          const count = active.filter((dump) => dump.list === list.id && !dump.done).length;
-          return (
-            <NavLink
-              key={list.id}
-              to={`/lists/${list.id}`}
-              className={navLink}
-              onClick={() => setMenuOpen(false)}
-            >
-              <ListDot color={list.color} className="mx-1.25" />
-              <span className="truncate">{list.label}</span>
-              {count > 0 && <span className={navCount}>{count}</span>}
-            </NavLink>
-          );
-        })}
-        <div className="mx-3 my-4.75 h-px bg-border" />
-        <NavLink to="/done" className={navLink} onClick={() => setMenuOpen(false)}>
-          <CheckCheck size={18} />
-          <span className="truncate">Done</span>
-          {completed.length > 0 && <span className={navCount}>{completed.length}</span>}
-        </NavLink>
-      </nav>
-      <button
-        className={cn(navItem, 'mt-auto hover:bg-muted max-phone:mb-[env(safe-area-inset-bottom)]')}
-        onClick={() => {
-          setMenuOpen(false);
-          setSettingsOpen(true);
-        }}
-      >
-        <Settings size={18} />
-        <span>Settings</span>
-      </button>
-    </>
-  );
+      </section>
+    );
+  }
 
   if (fatal)
     return (
@@ -406,40 +389,39 @@ export default function App() {
     // Pinned to the visible viewport so the composer rides above the phone keyboard. The height
     // eases with the iOS keyboard's curve and duration, which is longer than other motion here.
     <div className="fixed inset-x-0 top-(--vv-top,0px) h-(--vv-height,100dvh) overflow-hidden pointer-coarse:transition-[height] pointer-coarse:duration-250 pointer-coarse:ease-[cubic-bezier(0.38,0.7,0.125,1)]">
-      <aside className="fixed inset-y-0 left-0 z-20 flex w-59.5 flex-col overflow-y-auto overscroll-contain border-r bg-sidebar px-4.5 pt-7.75 pb-4.5 max-tablet:w-53 max-tablet:px-3.25 max-phone:hidden">
-        {navigation}
-      </aside>
-      <main className="ml-59.5 flex h-full min-w-0 flex-col max-tablet:ml-53 max-phone:ml-0">
+      <main className="flex h-full min-w-0 flex-col">
         <header className="shrink-0 border-b">
           <div className={cn(column, 'flex h-16 items-center gap-2 max-phone:h-14')}>
-            <Sheet open={menuOpen} onOpenChange={setMenuOpen}>
-              <SheetTrigger asChild>
+            {isHome ? (
+              <>
+                <Link to="/" className="shrink-0" aria-label="Dump home">
+                  <Brand
+                    className="gap-2 text-[22px] tracking-[-1px] max-phone:[&>span+span]:hidden"
+                    markClassName="size-7 rounded-[9px] [&_svg]:size-5"
+                  />
+                </Link>
+                <h1 className="sr-only">{title}</h1>
+              </>
+            ) : (
+              <>
                 <Button
                   variant="ghost"
                   size="icon"
-                  className="-ml-2 hidden max-phone:inline-flex"
-                  aria-label="Open navigation"
+                  className="-ml-2 shrink-0 text-muted-foreground"
+                  asChild
                 >
-                  <Menu size={21} />
+                  <Link to="/" aria-label="Back to your space">
+                    <ArrowLeft size={19} />
+                  </Link>
                 </Button>
-              </SheetTrigger>
-              <SheetContent
-                side="left"
-                className="w-[min(300px,85vw)] gap-0 overflow-y-auto bg-sidebar px-4.5 pt-7 pb-6"
-              >
-                <SheetTitle className="sr-only">Your space</SheetTitle>
-                <SheetDescription className="sr-only">
-                  Navigate your inbox and lists.
-                </SheetDescription>
-                {navigation}
-              </SheetContent>
-            </Sheet>
-            {currentList && <ListDot color={currentList.color} />}
-            <h1 className="truncate text-[20px] font-[600] tracking-[-0.6px] max-phone:text-[18px]">
-              {title}
-            </h1>
-            <span className="text-[12px] text-muted-foreground">{selected.length}</span>
-            <div className="ml-auto flex shrink-0 items-center gap-1">
+                {currentList && <ListDot color={currentList.color} />}
+                <h1 className="truncate text-[20px] font-[600] tracking-[-0.6px] max-phone:text-[18px]">
+                  {title}
+                </h1>
+                <span className="text-[12px] text-muted-foreground">{selected.length}</span>
+              </>
+            )}
+            <div className="ml-auto flex min-w-0 items-center gap-1">
               {currentList && (
                 <Button
                   variant="ghost"
@@ -470,26 +452,45 @@ export default function App() {
                   <span>{confirmClear ? `Clear ${completed.length}?` : 'Clear done'}</span>
                 </Button>
               )}
-              {isInbox && unfiled.length > 0 && (
+              {isHome && unfiled.length > 0 && (
                 <Button
                   variant="outline"
-                  className="bg-card text-[11px] text-muted-foreground dark:bg-card"
+                  className="bg-card text-[11px] text-muted-foreground dark:bg-card max-phone:size-9 max-phone:px-0"
+                  aria-label="Sort inbox"
                   onClick={() => setTriage(true)}
                 >
                   <Sparkles size={15} />
-                  <span>Sort inbox</span>
+                  <span className="max-phone:hidden">Sort inbox</span>
                 </Button>
               )}
-              <Button
-                variant="ghost"
-                size="icon"
-                className="hidden text-muted-foreground max-phone:inline-flex"
-                aria-label="Search your space"
-                onClick={openSearch}
-              >
-                <Search size={19} />
-              </Button>
               {status}
+              <div className="flex items-center gap-0.5 rounded-full border bg-card p-0.5">
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="size-8 rounded-full text-muted-foreground"
+                  aria-label="Search your space"
+                  title="Search (⌘K)"
+                  onClick={openSearch}
+                >
+                  <Search size={17} />
+                </Button>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="relative size-8 rounded-full text-muted-foreground"
+                  aria-label="Settings"
+                  onClick={() => setSettingsOpen(true)}
+                >
+                  <Settings size={17} />
+                  {syncProblem && (
+                    <span
+                      aria-hidden
+                      className="absolute top-1.5 right-1.5 size-2 rounded-full bg-destructive ring-2 ring-card"
+                    />
+                  )}
+                </Button>
+              </div>
             </div>
           </div>
         </header>
@@ -498,7 +499,7 @@ export default function App() {
           className="min-h-0 flex-1 overflow-y-auto overscroll-contain"
           onScroll={(event) => {
             const { scrollHeight, scrollTop, clientHeight } = event.currentTarget;
-            atBottom.current = scrollHeight - scrollTop - clientHeight < 48;
+            atBottom.current = scrollHeight - scrollTop - clientHeight < (atToday.current ? 1 : 48);
           }}
         >
           <div
@@ -545,21 +546,27 @@ export default function App() {
                   {format(new Date(), 'EEEE, MMMM d')}
                 </div>
                 <div className="mx-auto mb-3.75 grid size-14 place-items-center rounded-[18px] bg-secondary text-accent-foreground">
-                  {done ? <CheckCheck size={29} /> : <Inbox size={30} strokeWidth={1.5} />}
+                  {done ? (
+                    <CheckCheck size={29} />
+                  ) : currentList ? (
+                    <ListDot color={currentList.color} className="size-3 min-w-3" />
+                  ) : (
+                    <CalendarDays size={29} strokeWidth={1.5} />
+                  )}
                 </div>
                 <h2 className="text-[22px] font-[550] tracking-[-0.6px] max-phone:text-[19px]">
                   {done
                     ? 'Small wins will live here.'
                     : currentList
                       ? 'Room for something good.'
-                      : 'A clear inbox. A clearer head.'}
+                      : 'A clear head.'}
                 </h2>
                 <p className="mt-2 text-[12px] leading-[1.8] text-muted-foreground">
                   {done
                     ? 'Check off a thought when you’re finished with it.'
                     : currentList
                       ? `Dump something here, or type !${currentList.label.toLowerCase()} anywhere.`
-                      : 'Drop a thought, a link, or that thing you don’t want to forget.'}
+                      : 'Drop a thought, a link, or that thing you don’t want to forget. Give it a day, like “by friday”, and it waits for you in Today.'}
                 </p>
                 {composing && (
                   <form className={cn(composer, 'mt-7 rounded-[14px] text-left')} onSubmit={submit}>
@@ -572,13 +579,18 @@ export default function App() {
                       />
                     </div>
                     <div className="flex items-center justify-between gap-2.5 pt-3.25 pr-3.75 pb-3.75 pl-6 max-phone:pt-3 max-phone:pr-3.25 max-phone:pb-3.25 max-phone:pl-4.5">
-                      <span className="text-[10px] text-muted-foreground">
-                        Anything goes.
-                        <span className="ml-1.75 max-phone:hidden">
-                          Try <code className={hint}>!buy</code> or{' '}
-                          <code className={hint}>#weekend</code>
+                      {shownDue ? (
+                        <DraftDue due={shownDue} skip={() => setSkippedDue(shownDue)} />
+                      ) : (
+                        <span className="text-[10px] text-muted-foreground">
+                          Anything goes.
+                          <span className="ml-1.75 max-phone:hidden">
+                            Try <code className={hint}>!buy</code>,{' '}
+                            <code className={hint}>#weekend</code> or{' '}
+                            <code className={hint}>by friday</code>
+                          </span>
                         </span>
-                      </span>
+                      )}
                       <Button
                         type="submit"
                         className="text-[11px]"
@@ -592,31 +604,18 @@ export default function App() {
                     </div>
                   </form>
                 )}
-                {isInbox && (
-                  <div className="mt-6 flex flex-wrap justify-center gap-2 max-phone:gap-1.75">
-                    {[
-                      { text: 'An idea I don’t want to lose: ', label: 'An idea' },
-                      { text: '!buy ', label: 'A good find' },
-                      { text: '!todo ', label: 'A little to-do' },
-                    ].map((prompt) => (
-                      <button
-                        key={prompt.text}
-                        className="flex items-center gap-2 rounded-[6px] border bg-card px-2.5 py-1.75 text-[10px] text-muted-foreground"
-                        onClick={() => {
-                          setDraft(prompt.text);
-                          inputRef.current?.focus();
-                        }}
-                      >
-                        {prompt.label}
-                        <Plus size={13} />
-                      </button>
-                    ))}
-                  </div>
-                )}
               </div>
             ) : (
               <>
-                {!selectedId && (
+                {showToday && completed.length > 0 && (
+                  <Link
+                    to="/done"
+                    className="mb-4 self-center text-[11px] text-muted-foreground hover:text-foreground"
+                  >
+                    {completed.length} done →
+                  </Link>
+                )}
+                {!selectedId && !showToday && (
                   <div className="flex flex-1 flex-col items-center justify-center py-14 text-center max-phone:py-10">
                     <div className="text-[10px] tracking-[1.8px] text-muted-foreground uppercase">
                       {format(new Date(), 'EEEE')}
@@ -627,30 +626,53 @@ export default function App() {
                     <p className="mt-3 text-[12px] text-muted-foreground">
                       {done
                         ? `${selected.length} small ${selected.length === 1 ? 'win' : 'wins'}. A little more room in your mind.`
-                        : `${selected.length} ${selected.length === 1 ? 'thought' : 'thoughts'} ${currentList ? `in ${currentList.label}` : 'waiting in your inbox'}.`}
+                        : `${selected.length} ${selected.length === 1 ? 'thought' : 'thoughts'} in ${currentList?.label ?? 'your space'}.`}
                     </p>
                   </div>
                 )}
                 <div className="grid gap-5" aria-label="Dumps">
-                  {byDay(selected).map(({ day, dumps }) => (
-                    <section key={day} aria-label={dayLabel(day)}>
-                      <h2 className="mb-2 px-1 text-[9px] tracking-[1.3px] text-muted-foreground uppercase">
-                        {dayLabel(day)}
-                      </h2>
-                      <div className="divide-y overflow-hidden rounded-[12px] border bg-card shadow-soft">
-                        {dumps.map((dump) => (
-                          <DumpCard
-                            key={dump.id}
-                            dump={dump}
-                            lists={lists}
-                            actions={actions}
-                            sorting={state.sorting.has(dump.id)}
-                            showList={!currentList}
-                          />
-                        ))}
+                  {groups.map((group) => dumpGroup(group, 'h2'))}
+                  {showToday && (
+                    <section
+                      ref={todayRef}
+                      aria-label="Today"
+                      className={cn('grid gap-5', history.length > 0 && 'mt-3 border-t pt-6')}
+                    >
+                      <div className="px-1">
+                        <h2 className="text-[17px] font-[600] tracking-[-0.4px]">Today</h2>
+                        <p className="mt-0.5 text-[12px] text-muted-foreground">
+                          {format(new Date(), 'EEEE, MMMM d')}
+                          {todayGroups.length > 0 &&
+                            ` · ${overdue.length > 0 ? `${overdue.length} overdue · ` : ''}${dueToday.length || 'Nothing'} due today`}
+                        </p>
                       </div>
+                      {todayGroups.map((group) => dumpGroup(group, 'h3'))}
+                      {todayGroups.length === 0 && (
+                        <div className="rounded-[12px] border border-dashed px-5 py-6 text-center max-phone:px-4">
+                          <p className="text-[15px] font-[550] tracking-[-0.2px]">A clear day.</p>
+                          <p className="mx-auto mt-1 max-w-84 text-[12px] leading-[1.7] text-muted-foreground">
+                            Nothing due and nothing dumped yet. Give a dump a day, and it waits for
+                            you here when the day comes.
+                          </p>
+                          <div className="mt-4 flex flex-wrap justify-center gap-2 max-phone:gap-1.75">
+                            {DAY_EXAMPLES.map((example) => (
+                              <button
+                                key={example}
+                                className="flex items-center gap-1.5 rounded-[6px] border bg-card px-2.5 py-1.5 text-[11px] text-muted-foreground hover:text-foreground"
+                                onClick={() => {
+                                  setDraft(example);
+                                  inputRef.current?.focus();
+                                }}
+                              >
+                                <CalendarDays size={12} />
+                                {example}
+                              </button>
+                            ))}
+                          </div>
+                        </div>
+                      )}
                     </section>
-                  ))}
+                  )}
                 </div>
               </>
             )}
@@ -669,6 +691,11 @@ export default function App() {
                   className="max-h-50 min-w-0 flex-1 resize-none border-0 bg-transparent py-2 text-[15px] leading-[1.5] outline-none placeholder:text-muted-foreground placeholder:opacity-85 max-phone:text-[16px]"
                   rows={1}
                 />
+                {shownDue && (
+                  <div className="mb-1.5">
+                    <DraftDue due={shownDue} skip={() => setSkippedDue(shownDue)} />
+                  </div>
+                )}
                 <Button
                   type="submit"
                   size="icon"
@@ -683,7 +710,7 @@ export default function App() {
               </form>
               <p className="mt-2 px-1 text-[10px] text-muted-foreground max-phone:hidden">
                 Enter to dump · Shift Enter for a new line · <code className={hint}>!buy</code>{' '}
-                <code className={hint}>#weekend</code>
+                <code className={hint}>#weekend</code> <code className={hint}>by friday</code>
               </p>
             </div>
           </div>
@@ -699,6 +726,7 @@ export default function App() {
         navigate={navigate}
         select={(dump) => navigate(`${homeOf(dump)}?item=${dump.id}`)}
         settings={() => setSettingsOpen(true)}
+        newList={() => setEditor({})}
       />
       <SettingsDialog
         open={settingsOpen}

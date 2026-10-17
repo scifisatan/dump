@@ -20,6 +20,9 @@ Owns `src/shared/` and `src/core/`. These are the platform-independent parts tha
 ## Data model
 
 - A dump is one atomic JSON cell in the `dumps` table. Its list, done flag and provenance (`classified_by`: `'user'`, `'ai'` or `null`) always change together.
+- A dump's `due` is the day it is for: a calendar date (`YYYY-MM-DD`) in the device's time zone, with no time, or `null`. At capture, `parseDue` (`src/shared/due.ts`) reads it from the text, relative to the capture time: today, tonight, tomorrow, the day after tomorrow, a weekday (short names like `fri` only after a word such as `by` or `next`), `in 3 days`, `in 2 weeks`, `oct 24`, `24th october`, `the 24th`, or `2026-10-24`. A weekday, month day or `the 24th` means the next one, today included, and `next friday` means Friday of next week, counting weeks from Monday. The earliest phrase in the text wins, and dates inside links are ignored. → `tests/domain.test.ts` "due days"
+- A dump saved before days existed has no `due`; it reads as undated, and the next edit writes `due`. Clients built before days existed can't read a dump that has `due`, so they skip it until they are updated. → `tests/domain.test.ts` "reads a dump saved before days existed"
+- Home is the same on every client: `agenda` (`src/shared/due.ts`) splits the open dumps into older undated dumps (captured before today, oldest first), then Today's sections: Overdue (open dumps whose day has passed, oldest day first), Due today, Coming up (later days, soonest first), and Dumped today (today's undated dumps, newest last). A dump stays on its day; an overdue one stays in Overdue until it is done, moved or its day is cleared. The web app calls it directly. → `tests/domain.test.ts` "splits home into earlier dumps"
 - A list is also an atomic JSON record in the `lists` table, with a stable ID, a label, a color and a numeric `position`. Renaming keeps the ID. Nothing reorders lists yet.
 - Removing a dump or list writes `deleted: true`, and that tombstone syncs like any other edit. Rows are never removed without a deliberate compaction design.
 - Formats change in place. There are no schema versions or migrations while Dump is prerelease.
@@ -35,9 +38,10 @@ Owns `src/shared/` and `src/core/`. These are the platform-independent parts tha
 
 ## Commands
 
-The notebook changes only through the commands `createDumpClient` returns: `capture(raw, list)`, `setDone`, `file`, `remove`, `saveList`, `deleteList`, `clearDone`, `importDumps`, `backup`, `syncNow` and `reconnect`. The Mac engine wraps the same commands, and the phone app calls them directly.
+The notebook changes only through the commands `createDumpClient` returns: `capture(raw, list, due)`, `setDone`, `setDue`, `file`, `remove`, `saveList`, `deleteList`, `clearDone`, `importDumps`, `backup`, `syncNow` and `reconnect`. The Mac engine wraps the same commands, and the phone app calls them directly.
 
 - `capture` writes to the store synchronously and returns the dump. A `!list` prefix wins over the chosen `list`. A dump filed at capture gets `classified_by: 'user'`; an unfiled one is handed to `autoFile` on the next tick. → `tests/client.test.ts` "captures into the chosen list without asking Jev"
+- `capture`'s `due` is the day the composer showed, or `null` when the owner chose to send the dump without a date. Left out, the day is read from the text. `setDue` moves a dump to another day or clears it with `null`. → `tests/client.test.ts` "moves a dump to another day"
 - `file` (including filing back to the inbox with `null`) records `classified_by: 'user'`, so Jev leaves that dump alone.
 - `deleteList` tombstones the list and resets its dumps to `list: null, classified_by: null`, so `autoFile` sorts the open ones again. A dump moved to the inbox by hand stays there. → `tests/client.test.ts` "deleting a list sends its dumps back to Jev"
 - `clearDone` tombstones every completed dump and returns the count.

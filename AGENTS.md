@@ -10,7 +10,7 @@ These apply everywhere. The arrows point to the tests that enforce them; each ar
 - TinyBase owns merging: hybrid logical clocks, and the latest change wins for the whole dump, including offline edits. `updated_at` is display metadata only. Sync is TinyBase's own WebSocket synchronizer, with no custom protocol on top. → `tests/domain.test.ts` "TinyBase merge contract"
 - Each dump is one atomic JSON cell. Removing a dump writes a `deleted` tombstone; rows are never physically removed. There is no undo.
 - Every reader decodes rows through `readRows` (`src/shared/merge.ts`) and skips rows that fail validation. The server relays rows without reading them. → `tests/domain.test.ts` "skips rows a peer sent"
-- Dumps change only through the core's commands (`capture`, `setDone`, `file`, `remove`, `saveList`, `deleteList`, `clearDone`). These keep `classified_by` consistent with the filing queue. → `tests/client.test.ts` "dump and list actions"
+- Dumps change only through the core's commands (`capture`, `setDone`, `setDue`, `file`, `remove`, `saveList`, `deleteList`, `clearDone`). These keep `classified_by` consistent with the filing queue. → `tests/client.test.ts` "dump and list actions"
 - AI may file a dump, but never deletes it or rewrites its text.
 - Each server has one owner key. There are no accounts, sessions, cookies, multi-tenancy, D1, Postgres or application KV. Per-device tokens are deliberately not built. → `tests/auth.test.ts`
 - `src/core` runs in browsers, in the Mac app's JavaScriptCore and in the phone app's Hermes, so it may use only the web APIs that `mac/engine/polyfills.ts` installs and `mobile/src/runtime.ts` provides. → `mac/Tests/DumpKitTests`; Hermes is checked by hand (see [docs/mobile.md](docs/mobile.md#runtime))

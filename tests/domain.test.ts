@@ -9,6 +9,7 @@ import {
   makeDump,
 } from '../src/shared/schema';
 import type { MergeableContent, MergeableStore } from 'tinybase';
+import { agenda, parseDue } from '../src/shared/due';
 import { newStore, readRows } from '../src/shared/merge';
 
 // What TinyBase's synchronizers do once hashes show a difference.
@@ -49,6 +50,76 @@ describe('capture parser', () => {
     expect(() => makeDump('  ')).toThrow();
     expect(() => makeDump('!buy ')).toThrow();
     expect(() => makeDump('a'.repeat(20_001))).toThrow();
+  });
+});
+
+describe('due days', () => {
+  // Saturday, October 17, 2026, in this machine's time zone.
+  const now = new Date(2026, 9, 17, 9, 30).getTime();
+  it('reads the day a capture names, relative to when it was captured', () => {
+    const cases: [string, string | null][] = [
+      ['call the bank today', '2026-10-17'],
+      ['dentist tomorrow', '2026-10-18'],
+      ['the day after tomorrow, pick up the suit', '2026-10-19'],
+      ['submit my application by friday', '2026-10-23'],
+      ['saturday market', '2026-10-17'],
+      ['next saturday', '2026-10-24'],
+      ['next monday standup', '2026-10-19'],
+      ['next friday', '2026-10-23'],
+      ['pay rent by fri', '2026-10-23'],
+      ['in 3 days', '2026-10-20'],
+      ['in a week', '2026-10-24'],
+      ['in 2 weeks', '2026-10-31'],
+      ['oct 24 concert', '2026-10-24'],
+      ['24th october', '2026-10-24'],
+      ['dec 25, 2027', '2027-12-25'],
+      ['renew passport sept 3', '2027-09-03'],
+      ['on the 24th', '2026-10-24'],
+      ['by the 5th', '2026-11-05'],
+      ['tax return 2026-01-05', '2026-01-05'],
+      ['tomorrow, then friday', '2026-10-18'],
+    ];
+    for (const [text, due] of cases) expect([text, parseDue(text, now)]).toEqual([text, due]);
+  });
+  it('leaves ordinary words, impossible days and dates inside links alone', () => {
+    for (const text of [
+      'sat down to write',
+      'the sun is out',
+      'it may be later',
+      'feb 30',
+      'mark 5 as read',
+      'https://example.com/2026-10-30/post',
+    ])
+      expect([text, parseDue(text, now)]).toEqual([text, null]);
+  });
+  it('splits home into earlier dumps, then overdue, due today, coming up and dumped today', () => {
+    const make = (text: string, created: Date, due: string | null = null) =>
+      makeDump(text, crypto.randomUUID(), created.getTime(), DEFAULT_LISTS, null, due);
+    const dumps = [
+      make('dumped later', new Date(2026, 9, 17, 9)),
+      make('dumped first', new Date(2026, 9, 17, 8)),
+      make('late', new Date(2026, 9, 10), '2026-10-15'),
+      make('next week', new Date(2026, 9, 12), '2026-10-23'),
+      make('monday', new Date(2026, 9, 16), '2026-10-19'),
+      make('today', new Date(2026, 9, 11), '2026-10-17'),
+      make('yesterday', new Date(2026, 9, 16, 20)),
+      make('last week', new Date(2026, 9, 9)),
+    ];
+    const texts = (part: typeof dumps) => part.map((dump) => dump.text);
+    const plan = agenda(dumps, now);
+    expect(texts(plan.earlier)).toEqual(['last week', 'yesterday']);
+    expect(texts(plan.overdue)).toEqual(['late']);
+    expect(texts(plan.due)).toEqual(['today']);
+    expect(texts(plan.upcoming)).toEqual(['monday', 'next week']);
+    expect(texts(plan.dumped)).toEqual(['dumped first', 'dumped later']);
+  });
+  it('records the day at capture, unless the owner settled on another or none', () => {
+    const make = (due?: string | null) =>
+      makeDump('submit by friday', crypto.randomUUID(), now, DEFAULT_LISTS, null, due);
+    expect(make().due).toBe('2026-10-23');
+    expect(make('2026-10-30').due).toBe('2026-10-30');
+    expect(make(null).due).toBeNull();
+    expect(() => make('friday')).toThrow();
   });
 });
 
@@ -151,6 +222,18 @@ describe('TinyBase merge contract', () => {
       ['decor', 'ai'],
     ]).toContainEqual([result.list, result.classified_by]);
   });
+  it('reads a dump saved before days existed as undated, and writes its day on the next edit', () => {
+    const store = newStore();
+    const { due: _, ...old } = makeDump('an old thought');
+    store.setRow('dumps', old.id, { data: JSON.stringify(old) });
+    const [dump] = readRows(store).dumps;
+    expect(dump).toMatchObject({ id: old.id, text: 'an old thought', due: null });
+    expect(JSON.parse(encodeDump({ ...dump, done: true }))).toMatchObject({
+      due: null,
+      done: true,
+    });
+  });
+
   it('skips rows a peer sent that do not decode, instead of failing to open', () => {
     const store = newStore();
     const good = makeDump('a real thought');

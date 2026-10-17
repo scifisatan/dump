@@ -1,4 +1,4 @@
-import { CheckCheck, FileText, Inbox, ListFilter, Settings } from 'lucide-react';
+import { CalendarDays, CheckCheck, FileText, ListFilter, Plus, Settings } from 'lucide-react';
 import type { Collection, Dump } from '../../shared/schema';
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from './ui/dialog';
 import {
@@ -21,6 +21,7 @@ export function SearchDialog({
   navigate,
   select,
   settings,
+  newList,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
@@ -31,6 +32,7 @@ export function SearchDialog({
   navigate: (path: string) => void;
   select: (dump: Dump) => void;
   settings: () => void;
+  newList: () => void;
 }) {
   function go(path: string) {
     navigate(path);
@@ -56,9 +58,9 @@ export function SearchDialog({
           <CommandList>
             <CommandEmpty>No matches yet. Try a shorter phrase.</CommandEmpty>
             <CommandGroup heading="Your space">
-              <CommandItem value="Open inbox" onSelect={() => go('/')}>
-                <Inbox />
-                Inbox
+              <CommandItem value="Open today home inbox due overdue" onSelect={() => go('/')}>
+                <CalendarDays />
+                Today
               </CommandItem>
               <CommandItem value="Open done completed" onSelect={() => go('/done')}>
                 <CheckCheck />
@@ -77,6 +79,16 @@ export function SearchDialog({
             </CommandGroup>
             <CommandSeparator />
             <CommandGroup heading="Lists">
+              <CommandItem
+                value="New list create"
+                onSelect={() => {
+                  onOpenChange(false);
+                  newList();
+                }}
+              >
+                <Plus />
+                New list
+              </CommandItem>
               {lists.map((list) => (
                 <CommandItem
                   key={list.id}
