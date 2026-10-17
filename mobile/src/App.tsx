@@ -10,19 +10,21 @@ import { KeyboardProvider } from 'react-native-keyboard-controller';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { SheetHost } from './menu';
 import { useSession } from './notebook';
-import { Home } from './screens/Home';
 import { ListEditor } from './screens/ListEditor';
 import { NotebookScreen } from './screens/Notebook';
+import { PickDay } from './screens/PickDay';
+import { Search } from './screens/Search';
 import { Settings } from './screens/Settings';
 import { SortInbox } from './screens/SortInbox';
 import { navigationTheme, useColors } from './theme';
 import type { Place } from './views';
 
 export type Screens = {
-  Home: undefined;
   // `reveal` scrolls to and highlights a dump, after a search.
   Notebook: { place: Place; reveal?: string };
+  Search: undefined;
   ListEditor: { id?: string };
+  PickDay: { id: string };
   SortInbox: undefined;
   Settings: undefined;
 };
@@ -30,9 +32,9 @@ export type ScreenProps<Name extends keyof Screens> = NativeStackScreenProps<Scr
 
 const Stack = createNativeStackNavigator<Screens>();
 
-// The app opens on the inbox, ready to capture; Home, with the lists, is one step back.
+// The app opens on home, ready to capture. Lists and Done open from Search.
 const INITIAL: InitialState = {
-  routes: [{ name: 'Home' }, { name: 'Notebook', params: { place: { kind: 'inbox' } } }],
+  routes: [{ name: 'Notebook', params: { place: { kind: 'home' } } }],
 };
 
 export function App() {
@@ -57,15 +59,22 @@ export function App() {
                 contentStyle: { backgroundColor: colors.background },
               }}
             >
-              <Stack.Screen
-                name="Home"
-                component={Home}
-                options={{ title: 'Dump', headerLargeTitle: true }}
-              />
               <Stack.Screen name="Notebook" component={NotebookScreen} />
+              <Stack.Screen name="Search" component={Search} options={{ title: 'Search' }} />
               <Stack.Screen
                 name="ListEditor"
                 component={ListEditor}
+                options={{
+                  presentation: 'formSheet',
+                  sheetAllowedDetents: 'fitToContents',
+                  sheetGrabberVisible: true,
+                  headerShown: false,
+                  contentStyle: { backgroundColor: colors.card },
+                }}
+              />
+              <Stack.Screen
+                name="PickDay"
+                component={PickDay}
                 options={{
                   presentation: 'formSheet',
                   sheetAllowedDetents: 'fitToContents',

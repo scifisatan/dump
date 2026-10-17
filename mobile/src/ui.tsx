@@ -39,6 +39,9 @@ export const icons = {
   check: { ios: 'checkmark', android: 'check' },
   move: { ios: 'folder', android: 'drive_file_move' },
   copy: { ios: 'doc.on.doc', android: 'content_copy' },
+  search: { ios: 'magnifyingglass', android: 'search' },
+  close: { ios: 'xmark', android: 'close' },
+  calendar: { ios: 'calendar', android: 'calendar_today' },
 } satisfies Record<string, IconName>;
 
 export function Icon({
@@ -151,6 +154,10 @@ export function syncLabel(sync: SyncState) {
       return 'Signed out · enter the owner key';
   }
 }
+
+// Sync needs the owner's attention: it is offline, paused or signed out. Settings carries a mark.
+export const syncAlert = (sync: SyncState) =>
+  sync === 'offline' || sync === 'error' || sync === 'signed-out';
 
 export function syncTint(sync: SyncState, colors: Colors) {
   switch (sync) {
@@ -266,7 +273,15 @@ export function Button({
 
 // Header buttons and menus: native bar items on iOS, the same actions as icons on Android.
 export type HeaderItem =
-  | { kind: 'button'; label: string; icon: IconName; onPress: () => void; prominent?: boolean }
+  | {
+      kind: 'button';
+      label: string;
+      icon: IconName;
+      onPress: () => void;
+      prominent?: boolean;
+      // A red mark that something behind the button needs attention.
+      alert?: boolean;
+    }
   | {
       kind: 'menu';
       label: string;
@@ -288,6 +303,9 @@ export function headerItems(items: HeaderItem[], colors: Colors): NativeStackNav
                 onPress: item.onPress,
                 variant: item.prominent ? 'prominent' : 'plain',
                 tintColor: item.prominent ? colors.lime : undefined,
+                badge: item.alert
+                  ? { value: '!', style: { backgroundColor: colors.destructive, color: '#ffffff' } }
+                  : undefined,
               }
             : {
                 type: 'menu',
@@ -311,6 +329,9 @@ export function headerItems(items: HeaderItem[], colors: Colors): NativeStackNav
               style={styles.headerButton}
             >
               <Icon name={item.icon} size={22} color={colors.foreground} />
+              {item.alert ? (
+                <View style={[styles.alert, { backgroundColor: colors.destructive }]} />
+              ) : null}
             </Pressable>
           ) : (
             <Menu key={item.label} actions={item.items} onSelect={item.onSelect}>
@@ -382,4 +403,5 @@ const styles = StyleSheet.create({
   buttonText: { fontSize: 17 },
   headerItems: { flexDirection: 'row', gap: 18, alignItems: 'center' },
   headerButton: { padding: 4 },
+  alert: { position: 'absolute', top: 3, right: 3, width: 8, height: 8, borderRadius: 4 },
 });

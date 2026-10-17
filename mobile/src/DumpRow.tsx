@@ -1,24 +1,38 @@
 import * as Clipboard from 'expo-clipboard';
 import * as Haptics from 'expo-haptics';
 import * as WebBrowser from 'expo-web-browser';
+import { useNavigation } from '@react-navigation/native';
+import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { useRef } from 'react';
 import { Alert, Pressable, StyleSheet, Text, View } from 'react-native';
 import ReanimatedSwipeable, {
   SwipeDirection,
   type SwipeableMethods,
 } from 'react-native-gesture-handler/ReanimatedSwipeable';
+import { dayKey } from '../../src/shared/due';
 import type { Dump } from '../../src/shared/schema';
+import type { Screens } from './App';
 import { useSession } from './notebook';
 import { useColors } from './theme';
 import { Menu, type MenuItem } from './menu';
 import { Icon, icons, ListDot, type IconName } from './ui';
-import { host, placeOf, placeTitle, timeLabel, type Notebook, type Place } from './views';
+import {
+  dueLabel,
+  host,
+  overdue,
+  placeOf,
+  placeTitle,
+  timeLabel,
+  type Notebook,
+  type Place,
+} from './views';
 
 export const failed = (error: unknown) =>
   Alert.alert('That didn’t work', error instanceof Error ? error.message : String(error));
 
 // One dump. The circle marks it done; a long press opens every action. Swiping right marks it
-// done, and swiping left offers Remove, which needs a tap because there is no undo.
+// done, and swiping left offers Remove, which needs a tap because there is no undo. Its day opens
+// Pick a Day, and its list's name opens that list.
 export function DumpRow({
   dump,
   book,
@@ -36,9 +50,15 @@ export function DumpRow({
 }) {
   const { client } = useSession();
   const colors = useColors();
+  const navigation = useNavigation<NativeStackNavigationProp<Screens>>();
   const swipe = useRef<SwipeableMethods>(null);
   const list = showList ? book.list(dump.list) : undefined;
   const sorting = book.sorting.has(dump.id);
+  const late = overdue(dump);
+  const now = new Date();
+  const today = dayKey(now);
+  const tomorrow = dayKey(new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1));
+  const pickDay = () => navigation.navigate('PickDay', { id: dump.id });
 
   const act = (work: () => void) => {
     try {
@@ -64,6 +84,17 @@ export function DumpRow({
       icon: dump.done ? icons.open : icons.checked,
     },
     {
+      id: 'date',
+      title: dump.due ? 'Change Date' : 'Set a Date',
+      icon: icons.calendar,
+      items: [
+        { id: 'due:today', title: 'Today', checked: dump.due === today },
+        { id: 'due:tomorrow', title: 'Tomorrow', checked: dump.due === tomorrow },
+        { id: 'due:pick', title: 'Pick a Day…' },
+        ...(dump.due ? [{ id: 'due:clear', title: 'Clear Date' }] : []),
+      ],
+    },
+    {
       id: 'move',
       title: 'Move To',
       icon: icons.move,
@@ -85,6 +116,14 @@ export function DumpRow({
     else if (id === 'done') toggle();
     else if (id === 'copy') void Clipboard.setStringAsync(dump.text);
     else if (id === 'remove') act(() => client.remove(dump.id));
+    else if (id === 'due:pick') pickDay();
+    else if (id.startsWith('due:'))
+      act(() =>
+        client.setDue(
+          dump.id,
+          id === 'due:today' ? today : id === 'due:tomorrow' ? tomorrow : null,
+        ),
+      );
     else if (id.startsWith('file:')) act(() => client.file(dump.id, id.slice(5) || null));
   };
 
@@ -156,13 +195,41 @@ export function DumpRow({
             >
               {dump.text}
             </Text>
-            {list || sorting || dump.tags.length > 0 || dump.url ? (
+            {list || sorting || dump.due || dump.tags.length > 0 || dump.url ? (
               <View style={styles.meta}>
+                {dump.due ? (
+                  <Pressable
+                    onPress={pickDay}
+                    accessibilityRole="button"
+                    accessibilityLabel={`${late ? 'Overdue' : 'Due'} ${dueLabel(dump.due)}: change date`}
+                    hitSlop={6}
+                    style={[styles.link, { backgroundColor: colors.fill }]}
+                  >
+                    <Icon
+                      name={icons.calendar}
+                      size={11}
+                      color={late ? colors.destructive : colors.muted}
+                    />
+                    <Text
+                      style={[styles.metaText, { color: late ? colors.destructive : colors.muted }]}
+                    >
+                      {dueLabel(dump.due)}
+                    </Text>
+                  </Pressable>
+                ) : null}
                 {list ? (
-                  <View style={styles.chip}>
+                  <Pressable
+                    onPress={() =>
+                      navigation.push('Notebook', { place: { kind: 'list', id: list.id } })
+                    }
+                    accessibilityRole="link"
+                    accessibilityLabel={`Open ${list.label}`}
+                    hitSlop={6}
+                    style={styles.chip}
+                  >
                     <ListDot color={list.color} size={7} />
                     <Text style={[styles.metaText, { color: colors.muted }]}>{list.label}</Text>
-                  </View>
+                  </Pressable>
                 ) : sorting ? (
                   <Text style={[styles.metaText, { color: colors.muted }]}>Sorting…</Text>
                 ) : null}

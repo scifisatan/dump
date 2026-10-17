@@ -146,7 +146,7 @@ mobile/                iOS and Android app (Expo, React Native); its own npm pac
     ├── notebook.ts    the open notebook: launch, switch, connect, sign in
     ├── views.ts       pure view helpers: places, day rows, search, labels
     ├── App.tsx        native stack navigation
-    ├── screens/       Home, Notebook (a view), ListEditor, SortInbox, Settings
+    ├── screens/       Notebook (home, a list or Done), Search, PickDay, ListEditor, SortInbox, Settings
     ├── DumpRow.tsx    a dump: done circle, swipe actions, context menu
     ├── Composer.tsx   capture field pinned above the keyboard
     ├── menu.tsx       native menus, with an action sheet in Expo Go

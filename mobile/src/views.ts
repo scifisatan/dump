@@ -1,9 +1,10 @@
 import type { Snapshot } from '../../src/core/client';
+import { agenda, dayKey } from '../../src/shared/due';
 import type { Collection, Dump } from '../../src/shared/schema';
 
-// The notebook's views, as on the web and the Mac: every open dump, one list's open dumps, or
-// the finished ones.
-export type Place = { kind: 'inbox' } | { kind: 'list'; id: string } | { kind: 'done' };
+// The notebook's views, as on the web and the Mac: home (every open dump, ending in Today), one
+// list's open dumps, or the finished ones.
+export type Place = { kind: 'home' } | { kind: 'list'; id: string } | { kind: 'done' };
 
 // What the screens show: dumps (newest first) and lists, without tombstones.
 export type Notebook = {
@@ -37,19 +38,19 @@ export function notebook(snapshot: Snapshot): Notebook {
 
 // A view's dumps, newest first. A list that is gone shows nothing; its screen leaves for Home.
 export function dumpsIn(place: Place, notebook: Notebook) {
-  if (place.kind === 'inbox') return notebook.open;
+  if (place.kind === 'home') return notebook.open;
   if (place.kind === 'done') return notebook.done;
   return notebook.open.filter((dump) => dump.list === place.id);
 }
 
 export function placeTitle(place: Place, notebook: Notebook) {
-  if (place.kind === 'inbox') return 'Inbox';
+  if (place.kind === 'home') return 'Home';
   if (place.kind === 'done') return 'Done';
-  return notebook.list(place.id)?.label ?? 'Inbox';
+  return notebook.list(place.id)?.label ?? 'Home';
 }
 
 export const placeOf = (dump: Dump): Place =>
-  dump.done ? { kind: 'done' } : dump.list ? { kind: 'list', id: dump.list } : { kind: 'inbox' };
+  dump.done ? { kind: 'done' } : dump.list ? { kind: 'list', id: dump.list } : { kind: 'home' };
 
 // Open dumps with no list that Jev isn't sorting: what Sort inbox walks through.
 export const unfiled = (notebook: Notebook) =>
@@ -71,7 +72,11 @@ const fold = (text: string) => text.normalize('NFD').replace(/\p{M}/gu, '').toLo
 // Rows for an inverted list, which draws its first row at the bottom: newest dump first, and each
 // day's heading after its dumps so that it shows above them.
 export type Row =
-  | { type: 'day'; key: string; label: string }
+  | { type: 'day'; key: string; label: string; overdue?: boolean }
+  | { type: 'today'; key: string; summary: string }
+  // Today has nothing in it yet.
+  | { type: 'quiet'; key: string }
+  | { type: 'done'; key: string; count: number }
   | { type: 'dump'; key: string; dump: Dump };
 
 export function rows(dumps: Dump[], now = new Date()): Row[] {
@@ -85,6 +90,41 @@ export function rows(dumps: Dump[], now = new Date()): Row[] {
   }
   if (day) result.push(heading(day, now));
   return result;
+}
+
+// Home's rows for an inverted list. Read top to bottom: a link to Done, older undated dumps by
+// day, then Today's heading and its sections (or a quiet note when it has none), just above the
+// composer.
+export function homeRows(notebook: Notebook, now = new Date()): Row[] {
+  const plan = agenda(notebook.open, now.getTime());
+  const top: Row[] = [];
+  if (notebook.done.length > 0)
+    top.push({ type: 'done', key: 'done', count: notebook.done.length });
+  top.push(...rows([...plan.earlier].reverse(), now).reverse());
+  const date = now.toLocaleDateString(undefined, {
+    weekday: 'long',
+    month: 'long',
+    day: 'numeric',
+  });
+  const overdue = plan.overdue.length > 0 ? `${plan.overdue.length} overdue · ` : '';
+  const quiet = [plan.overdue, plan.due, plan.upcoming, plan.dumped].every((part) => !part.length);
+  top.push({
+    type: 'today',
+    key: 'today',
+    summary: quiet ? date : `${date} · ${overdue}${plan.due.length || 'Nothing'} due today`,
+  });
+  if (quiet) top.push({ type: 'quiet', key: 'today-quiet' });
+  for (const [key, label, dumps] of [
+    ['overdue', 'Overdue', plan.overdue],
+    ['due', 'Due today', plan.due],
+    ['upcoming', 'Coming up', plan.upcoming],
+    ['dumped', 'Dumped today', plan.dumped],
+  ] as const) {
+    if (dumps.length === 0) continue;
+    top.push({ type: 'day', key: `today-${key}`, label, overdue: key === 'overdue' });
+    for (const dump of dumps) top.push({ type: 'dump', key: dump.id, dump });
+  }
+  return top.reverse();
 }
 
 const heading = (day: Date, now: Date): Row => ({
@@ -111,6 +151,27 @@ export function dayLabel(day: Date, now = new Date()) {
     year: day.getFullYear() === now.getFullYear() ? undefined : 'numeric',
   });
 }
+
+// A due day as it reads from today: Today, Tomorrow, a weekday within the week, else a date.
+export function dueLabel(due: string, now = new Date()) {
+  const [year, month, day] = due.split('-').map(Number);
+  const date = new Date(year ?? 0, (month ?? 1) - 1, day ?? 1);
+  const days = Math.round((date.getTime() - startOfDay(now).getTime()) / 86_400_000);
+  if (days === 0) return 'Today';
+  if (days === 1) return 'Tomorrow';
+  if (days === -1) return 'Yesterday';
+  if (days > 1 && days < 7) return date.toLocaleDateString(undefined, { weekday: 'long' });
+  return date.toLocaleDateString(undefined, {
+    weekday: date.getFullYear() === now.getFullYear() ? 'short' : undefined,
+    month: 'short',
+    day: 'numeric',
+    year: date.getFullYear() === now.getFullYear() ? undefined : 'numeric',
+  });
+}
+
+// An open dump whose day has passed.
+export const overdue = (dump: Dump, now = new Date()) =>
+  !dump.done && dump.due !== null && dump.due < dayKey(now);
 
 // Rows sit under a day heading, so today's show a short age and older ones their time.
 export function timeLabel(created: number, now = new Date()) {

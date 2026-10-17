@@ -11,7 +11,7 @@ Owns `mobile/`. For how a user installs and uses the app, read README § Phone a
 - `src/platform.ts` is the phone `ClientPlatform`: one expo-sqlite database per notebook (`dump-v1-<profile-id>.db`, TinyBase JSON in the `notebook` table), AppState and expo-network events, and no tabs.
 - `src/profiles.ts` keeps the profile registry in expo-sqlite's key-value store (`dump-connections`) and owner keys in expo-secure-store (Keychain on iOS, Keystore on Android).
 - `src/notebook.ts` is the open notebook: launching, switching, connecting and signing in, following the rules in [core.md](core.md#connections-and-profiles).
-- `src/views.ts` holds the screens' pure helpers: which dumps a view shows, day rows for the inverted list, search, labels. → `tests/mobile-views.test.ts`
+- `src/views.ts` holds the screens' pure helpers: which dumps a view shows, rows for the inverted list (home's come from `agenda`, [core.md § Data model](core.md#data-model)), search, labels and due days. → `tests/mobile-views.test.ts`
 - `src/App.tsx` (native stack navigation), `src/screens/`, `src/DumpRow.tsx`, `src/Composer.tsx`, `src/menu.tsx`, `src/ui.tsx` and `src/theme.ts` are the UI.
 - `metro.config.js` watches `../src` and resolves packages from `mobile/node_modules`, so TinyBase and Zod load once even for files under `../src`. `tsconfig.json` maps them to the same copies for types.
 - `ios/`, `android/` and `dist/` are generated and not committed. Configure native settings in `app.json`; `npx expo prebuild` regenerates the native projects.
@@ -26,9 +26,10 @@ Owns `mobile/`. For how a user installs and uses the app, read README § Phone a
 ## Behavior
 
 - The first launch opens a notebook on this phone right away, as the Mac does, and Settings greets the owner.
-- The app opens on the inbox. Home, one step back, lists the inbox, lists and Done with counts, search across everything, and the sync status.
-- Each view is a list grouped by day with the newest at the bottom, and a composer pinned above the keyboard. Return adds a line; the send button saves and keeps the keyboard up. A list view captures into its list, and a `!list` prefix wins. Done has no composer.
-- Rows: the circle marks done. A long press opens every action (open link, done, move, copy, remove). Swiping right marks done; swiping left reveals Remove, which needs a tap because there is no undo.
+- The app opens on home, the root of the stack: the Dump mark at the top left, and Search and Settings at the top right of every view. Settings carries a badge (iOS 26) or a dot (Android) while sync needs attention (offline, paused, signed out, or unable to save); the Settings screen shows the state and Retry. Search searches everything and, before you type, lists the lists (with New List) and Done; choosing one replaces Search, so going back returns home. A row's list name opens that list.
+- Each view is a list with the newest at the bottom and a composer pinned above the keyboard. Home ends in Today, just above the composer, with older days above it and a link to Done at the very top. An empty Today says "A clear day." and offers example dumps with days that fill the composer. → `tests/mobile-views.test.ts` "marks an empty Today as quiet" It opens at the bottom, or with Today's heading at the top when Today is taller than the screen. Lists and Done are grouped by day. Return adds a line; the send button saves and keeps the keyboard up. A list view captures into its list, and a `!list` prefix wins. Done has no composer. No test runs the screens.
+- Days: the composer shows the day it read from the draft, and its × saves without it. A dated row shows its day, red when overdue; tapping it opens Pick a Day, a sheet where a day is typed as in a dump ("friday", "oct 24") and read by the same parser, with Today, Tomorrow and Clear Date. The long-press menu has the same choices.
+- Rows: the circle marks done. A long press opens every action (open link, done, date, move, copy, remove). Swiping right marks done; swiping left reveals Remove, which needs a tap because there is no undo.
 - Native menus come from `@react-native-menu/menu`. Expo Go doesn't include it, so there `src/menu.tsx` opens the same actions in an action sheet.
 - The web app address in Settings applies as it is typed, so a server checked next already sees it.
 - Going to the background saves the notebook. Sync resumes when the app returns to the foreground or the network comes back.

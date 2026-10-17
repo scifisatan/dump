@@ -1,15 +1,41 @@
 import { useEffect, useLayoutEffect, useRef, useState } from 'react';
-import { ActivityIndicator, Alert, FlatList, StyleSheet, Text, View } from 'react-native';
+import {
+  ActivityIndicator,
+  Alert,
+  FlatList,
+  Pressable,
+  StyleSheet,
+  Text,
+  View,
+} from 'react-native';
 import type { ScreenProps } from '../App';
-import { Composer, KeyboardSpace } from '../Composer';
+import { Composer, KeyboardSpace, type ComposerHandle } from '../Composer';
 import { DumpRow, failed } from '../DumpRow';
 import { useSession, useSnapshot } from '../notebook';
 import { useColors } from '../theme';
-import { EmptyState, headerItems, icons, type HeaderItem } from '../ui';
-import { dumpsIn, notebook, placeTitle, prefixFor, rows, unfiled, type Row } from '../views';
+import {
+  EmptyState,
+  headerItems,
+  Icon,
+  icons,
+  Mark,
+  syncAlert,
+  syncLabel,
+  type HeaderItem,
+} from '../ui';
+import {
+  dumpsIn,
+  homeRows,
+  notebook,
+  placeTitle,
+  prefixFor,
+  rows,
+  unfiled,
+  type Row,
+} from '../views';
 
-// One view (the inbox, a list, or Done): dumps grouped by day with the newest at the bottom, and a
-// composer pinned below them, as on the web and the Mac.
+// One view, as on the web and the Mac: home (older dumps by day, then Today just above the
+// composer), a list, or Done. The newest dumps sit at the bottom, next to the composer.
 export function NotebookScreen({ navigation, route }: ScreenProps<'Notebook'>) {
   const { place, reveal } = route.params;
   const { client } = useSession();
@@ -18,15 +44,19 @@ export function NotebookScreen({ navigation, route }: ScreenProps<'Notebook'>) {
   const book = notebook(snapshot);
   const list = place.kind === 'list' ? book.list(place.id) : undefined;
   const gone = snapshot.ready && place.kind === 'list' && !list;
-  const data = rows(dumpsIn(place, book));
-  const sortable = place.kind === 'inbox' ? unfiled(book).length : 0;
+  const home = place.kind === 'home';
+  const data = home ? homeRows(book) : rows(dumpsIn(place, book));
+  const sortable = home ? unfiled(book).length : 0;
   const done = book.done.length;
+  const sync = snapshot.sync;
+  const storageError = snapshot.storageError;
   const listRef = useRef<FlatList<Row>>(null);
+  const composer = useRef<ComposerHandle>(null);
   const [highlight, setHighlight] = useState(reveal);
 
   // A list deleted here or on another device leaves its view.
   useEffect(() => {
-    if (gone) navigation.popTo('Home');
+    if (gone) navigation.popToTop();
   }, [gone, navigation]);
 
   useEffect(() => {
@@ -84,19 +114,49 @@ export function NotebookScreen({ navigation, route }: ScreenProps<'Notebook'>) {
             ],
           ),
       });
-    navigation.setOptions({ title, ...headerItems(items, colors) });
-  }, [navigation, title, sortable, done, place, client, colors]);
-
-  // After a search, start at the dump that was chosen.
-  const revealIndex = reveal ? data.findIndex((row) => row.key === reveal) : -1;
-  const [initialReveal] = useState(revealIndex);
-  useEffect(() => {
-    if (initialReveal < 0) return;
-    const frame = requestAnimationFrame(() =>
-      listRef.current?.scrollToIndex({ index: initialReveal, viewPosition: 0.5, animated: false }),
+    // Search and Settings sit together on every view, as in the web app's top bar. Settings is
+    // where sync lives, so it carries a mark when sync needs attention.
+    const alert = syncAlert(sync) || storageError !== null;
+    items.push(
+      {
+        kind: 'button',
+        label: 'Search',
+        icon: icons.search,
+        onPress: () => navigation.navigate('Search'),
+      },
+      {
+        kind: 'button',
+        label: alert ? `Settings: ${storageError ?? syncLabel(sync)}` : 'Settings',
+        icon: icons.settings,
+        alert,
+        onPress: () => navigation.navigate('Settings'),
+      },
     );
-    return () => cancelAnimationFrame(frame);
-  }, [initialReveal]);
+    navigation.setOptions({
+      title: home ? '' : title,
+      headerLeft: home ? () => <Mark size={28} /> : undefined,
+      ...headerItems(items, colors),
+    });
+  }, [navigation, title, home, sortable, done, sync, storageError, place, client, colors]);
+
+  // After a search, start at the dump that was chosen. Home otherwise opens with Today's heading
+  // at the top when Today is taller than the screen, so overdue dumps are in view; the offset
+  // clamps at the bottom when Today fits.
+  const revealIndex = reveal ? data.findIndex((row) => row.key === reveal) : -1;
+  const todayIndex = home ? data.findIndex((row) => row.type === 'today') : -1;
+  const [anchor] = useState(
+    revealIndex >= 0
+      ? { index: revealIndex, viewPosition: 0.5 }
+      : todayIndex >= 0
+        ? { index: todayIndex, viewPosition: 1 }
+        : null,
+  );
+  const anchored = useRef(false);
+  const settle = () => {
+    if (!anchor || anchored.current) return;
+    anchored.current = true;
+    listRef.current?.scrollToIndex({ ...anchor, animated: false });
+  };
 
   return (
     <View style={styles.screen}>
@@ -105,7 +165,7 @@ export function NotebookScreen({ navigation, route }: ScreenProps<'Notebook'>) {
           <ActivityIndicator color={colors.muted} />
           <Text style={{ color: colors.muted }}>Opening your notebook…</Text>
         </View>
-      ) : data.length === 0 ? (
+      ) : place.kind !== 'home' && data.length === 0 ? (
         <Empty place={place.kind} prefix={list ? prefixFor(list) : null} />
       ) : (
         <FlatList
@@ -113,9 +173,55 @@ export function NotebookScreen({ navigation, route }: ScreenProps<'Notebook'>) {
           inverted
           data={data}
           keyExtractor={(row) => row.key}
+          // Render down to the anchor row, so it can be measured and scrolled to.
+          initialNumToRender={Math.max(10, (anchor?.index ?? 0) + 2)}
+          onContentSizeChange={() => requestAnimationFrame(settle)}
           renderItem={({ item }) =>
             item.type === 'day' ? (
-              <Text style={[styles.day, { color: colors.muted }]}>{item.label}</Text>
+              <Text
+                style={[styles.day, { color: item.overdue ? colors.destructive : colors.muted }]}
+              >
+                {item.label}
+              </Text>
+            ) : item.type === 'today' ? (
+              <View style={[styles.today, { borderTopColor: colors.border }]}>
+                <Text style={[styles.todayTitle, { color: colors.foreground }]}>Today</Text>
+                <Text style={[styles.todaySummary, { color: colors.muted }]}>{item.summary}</Text>
+              </View>
+            ) : item.type === 'quiet' ? (
+              <View style={[styles.quiet, { borderColor: colors.border }]}>
+                <Text style={[styles.quietTitle, { color: colors.foreground }]}>A clear day.</Text>
+                <Text style={[styles.quietMessage, { color: colors.muted }]}>
+                  Nothing due and nothing dumped yet. Give a dump a day, and it waits for you here
+                  when the day comes.
+                </Text>
+                <View style={styles.examples}>
+                  {DAY_EXAMPLES.map((example) => (
+                    <Pressable
+                      key={example}
+                      onPress={() => composer.current?.fill(example)}
+                      accessibilityRole="button"
+                      accessibilityHint="Puts it in the composer"
+                      style={[
+                        styles.example,
+                        { backgroundColor: colors.card, borderColor: colors.border },
+                      ]}
+                    >
+                      <Icon name={icons.calendar} size={12} color={colors.muted} />
+                      <Text style={[styles.exampleText, { color: colors.muted }]}>{example}</Text>
+                    </Pressable>
+                  ))}
+                </View>
+              </View>
+            ) : item.type === 'done' ? (
+              <Pressable
+                onPress={() => navigation.push('Notebook', { place: { kind: 'done' } })}
+                accessibilityRole="link"
+                style={styles.doneLink}
+              >
+                <Text style={[styles.doneText, { color: colors.muted }]}>{item.count} done</Text>
+                <Icon name={icons.chevron} size={11} color={colors.muted} />
+              </Pressable>
             ) : (
               <DumpRow
                 dump={item.dump}
@@ -128,7 +234,12 @@ export function NotebookScreen({ navigation, route }: ScreenProps<'Notebook'>) {
           onScrollToIndexFailed={({ index, averageItemLength }) => {
             listRef.current?.scrollToOffset({ offset: index * averageItemLength, animated: false });
             setTimeout(
-              () => listRef.current?.scrollToIndex({ index, viewPosition: 0.5, animated: false }),
+              () =>
+                listRef.current?.scrollToIndex({
+                  index,
+                  viewPosition: anchor?.viewPosition ?? 0.5,
+                  animated: false,
+                }),
               50,
             );
           }}
@@ -144,6 +255,7 @@ export function NotebookScreen({ navigation, route }: ScreenProps<'Notebook'>) {
       ) : (
         <>
           <Composer
+            ref={composer}
             book={book}
             list={place.kind === 'list' ? place.id : null}
             ready={snapshot.ready}
@@ -176,7 +288,10 @@ export function confirmDeleteList(label: string, remove: () => void) {
   );
 }
 
-function Empty({ place, prefix }: { place: 'inbox' | 'list' | 'done'; prefix: string | null }) {
+// Shown in an empty Today; each fills the composer, and its day shows before it is saved.
+const DAY_EXAMPLES = ['Call the bank tomorrow', 'Pay rent by friday', 'Book the dentist in 3 days'];
+
+function Empty({ place, prefix }: { place: 'list' | 'done'; prefix: string | null }) {
   if (place === 'done')
     return (
       <EmptyState
@@ -185,19 +300,11 @@ function Empty({ place, prefix }: { place: 'inbox' | 'list' | 'done'; prefix: st
         message="Check off a thought when you’re finished with it."
       />
     );
-  if (place === 'list')
-    return (
-      <EmptyState
-        icon={icons.move}
-        title="Room for something good."
-        message={`Dump something here, or type ${prefix ?? '!list'} anywhere.`}
-      />
-    );
   return (
     <EmptyState
-      icon={icons.inbox}
-      title="A clear inbox. A clearer head."
-      message="Drop a thought, a link, or that thing you don’t want to forget."
+      icon={icons.move}
+      title="Room for something good."
+      message={`Dump something here, or type ${prefix ?? '!list'} anywhere.`}
     />
   );
 }
@@ -213,4 +320,52 @@ const styles = StyleSheet.create({
     paddingTop: 18,
     paddingBottom: 4,
   },
+  today: {
+    marginTop: 18,
+    paddingTop: 18,
+    paddingHorizontal: 16,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    gap: 2,
+  },
+  todayTitle: { fontSize: 22, fontWeight: '700' },
+  todaySummary: { fontSize: 14 },
+  quiet: {
+    marginHorizontal: 16,
+    marginTop: 12,
+    paddingVertical: 20,
+    paddingHorizontal: 18,
+    borderRadius: 14,
+    borderCurve: 'continuous',
+    borderWidth: 1,
+    borderStyle: 'dashed',
+    alignItems: 'center',
+    gap: 6,
+  },
+  quietTitle: { fontSize: 17, fontWeight: '600' },
+  quietMessage: { fontSize: 14, lineHeight: 20, textAlign: 'center' },
+  examples: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    justifyContent: 'center',
+    gap: 8,
+    marginTop: 8,
+  },
+  example: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 8,
+    borderWidth: StyleSheet.hairlineWidth,
+  },
+  exampleText: { fontSize: 13 },
+  doneLink: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    alignSelf: 'center',
+    gap: 4,
+    paddingVertical: 12,
+  },
+  doneText: { fontSize: 13 },
 });

@@ -15,7 +15,7 @@ Open the web app and choose **Get started**. Then either connect your server (en
 | | |
 | --- | --- |
 | Capture | Type and press Enter. Shift+Enter adds a line, and `/` focuses the composer. |
-| Dates | Write the day in the dump: `submit the form by friday`, `dentist tomorrow`, `oct 24`, `in 3 days`. The composer shows the day before you send; its × sends the dump without one. Home is one list of everything, ending in **Today** just above the composer: what's overdue, due today and coming up, then what you dumped today. Scroll up for older dumps. Change or clear a day from the date on the card. The Mac and phone apps keep a dump's day but don't show it yet. |
+| Dates | Write the day in the dump: `submit the form by friday`, `dentist tomorrow`, `oct 24`, `in 3 days`. The composer shows the day before you send; its × sends the dump without one. Home is one list of everything, ending in **Today** just above the composer: what's overdue, due today and coming up, then what you dumped today. Scroll up for older dumps. Change or clear a day from the date on the card. The phone app works the same way; the Mac app keeps a dump's day but doesn't show it yet. |
 | File as you type | Start with `!list`. For example, `!buy warm floor lamp #reading` files to Buy and adds the tag `reading`. The default lists are `!ideas`, `!buy`, `!watch`, `!decor` and `!todo`; for list names with spaces, use hyphens: `!weekend-plans`. |
 | Auto-file | With Jev on, other dumps show "Sorting…", then move to Jev's pick, or to To do when Jev is unsure. If you file a dump first, your choice wins. |
 | Lists | Open one from search (Ctrl/Cmd+K) or by tapping its name on a dump. Create one with **New list** in search; edit or delete one with the pencil in its header. |
@@ -42,7 +42,7 @@ DUMP_SIGN_IDENTITY="Apple Development: Your Name (TEAMID)"
 
 ## Phone app
 
-The app opens on your inbox with the composer ready: type and tap the arrow. Go back for your lists, Done, search and sync status. Tap a dump's circle to finish it, swipe right to mark it done, swipe left to remove it, or long-press for every action (open the link, move it to a list, copy). Like the Mac app, it runs the web app's own core, so it works offline, files with `!list`, lets Jev sort, and syncs with your server. Connect your server in Settings.
+The app opens on home with the composer ready: type and tap the arrow. Like the web app, home ends in Today, just above the composer, and older dumps are above it. The buttons at the top open search and Settings, and Settings is marked when sync needs your attention; search also lists your lists and Done. Tap a dump's day to move it to another day, or its list to open that list. Tap a dump's circle to finish it, swipe right to mark it done, swipe left to remove it, or long-press for every action (open the link, move it to a list, copy). Like the Mac app, it runs the web app's own core, so it works offline, files with `!list`, lets Jev sort, and syncs with your server. Connect your server in Settings.
 
 ```bash
 cd mobile && npm install
