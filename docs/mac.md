@@ -5,12 +5,12 @@ Owns `mac/`. For how a user installs and uses the app, read README § Mac app. T
 ## Layout
 
 - `mac/engine/` bundles `src/core`, `src/shared` and TinyBase into `mac/build/engine.js` (`build.mjs`). The bundle is a classic script, with no modules and no DOM.
-  - `index.ts` is the engine API that Swift calls. Its methods wrap the core's commands: `snapshot(full)`, `listFor`, `capture(text, list)`, `setDone`, `file`, `remove`, `saveList`, `deleteList`, `clearDone`, `reconnect`, `network`, `resume`, `suspend`.
+  - `index.ts` is the engine API that Swift calls. Its methods wrap the core's commands: `snapshot(full)`, `listFor`, `dueFor`, `capture(text, list, due)`, `setDone`, `setDue`, `file`, `remove`, `saveList`, `deleteList`, `clearDone`, `reconnect`, `network`, `resume`, `suspend`.
   - `platform.ts` is the Mac `ClientPlatform`.
   - `native.ts` is the bridge to Swift.
   - `polyfills.ts` supplies the web APIs that JavaScriptCore lacks.
 - `Sources/DumpKit/` runs the engine in JavaScriptCore and supplies the platform natively: timers, randomness, HTTP (`HTTPBridge.swift`), WebSockets (`SocketBridge.swift`), notebook files, network state and the Keychain. It also holds the profiles (`Profiles.swift`).
-- `Sources/Dump/` is the AppKit and SwiftUI shell: the hotkey (`HotKey.swift`), capture panel (`Capture*.swift`), notebook window (`Notebook*.swift`), settings (`SettingsView.swift`) and menu bar (`AppDelegate.swift`). App state lives in `AppModel.swift`.
+- `Sources/Dump/` is the AppKit and SwiftUI shell: the hotkey (`HotKey.swift`), capture panel (`Capture*.swift`), notebook window (`Notebook*.swift`, with day labels in `Due.swift`), settings (`SettingsView.swift`) and menu bar (`AppDelegate.swift`). App state lives in `AppModel.swift`.
 - `Sources/dump-check/` is a headless sync check against a running server.
 - `scripts/build-app.sh` builds, signs and installs the app (`--install`). `scripts/render-icon.swift` draws the icon.
 - The app runs the web app's own core, so capture, `!list` filing, Jev, profiles and sync behave as they do on the web. When the Mac needs new behavior, add it to the core and expose it through `index.ts`. Swift should only call the engine, never reimplement notebook logic.
@@ -26,7 +26,8 @@ Owns `mac/`. For how a user installs and uses the app, read README § Mac app. T
 - **Origin:** as a non-browser client, the app sends an allowed `Origin`. That is the hosted app's origin, or the dev client's (`http://localhost:6191`) when the server is on localhost. Settings → Advanced can override it (`webAppOrigin`).
 - **Storage:** notebooks are TinyBase mergeable JSON in `~/Library/Application Support/Dump/Notebooks/<profile-id>.json`, written atomically. The registry and settings live in UserDefaults (domain `np.com.abishrestha.dump.mac`, keys `connections`, `shortcut`, `webAppOrigin`). Owner keys live in the Keychain. Connecting, switching and signing in follow the web app's rules ([core.md](core.md#connections-and-profiles)).
 - **Hotkey:** the global hotkey (default ⇧⌘Space) uses Carbon `RegisterEventHotKey`, which needs no Accessibility permission.
-- **Notebook window:** it does what the web app does, all through engine commands. Its composer files into the list being viewed, and a `!list` prefix still wins. Snapshots carry every dump only while the window is open (`snapshot(full)`), which keeps the panel's cost per change small.
+- **Notebook window:** it does what the web app does, all through engine commands, with no sidebar. Home ends in Today, just above the composer, grouped by the engine (`home` in the snapshot, from `agenda`), and opens with Today's heading at the top when Today is taller than the window. The toolbar holds the Dump mark (a back arrow in a list or Done), Sort Inbox, Edit List or Clear Done, the Lists menu (lists, Done, New List), the sync state (only while it needs attention: offline, paused, signed out, or unable to save; a click retries a paused sync or opens Settings), Settings and search. An empty Today says "A clear day." and offers example dumps with days that fill the composer. A dump's list name opens the list, and its day opens Today, Tomorrow, Pick a Day… (a calendar sheet) and Clear Date, as does the context menu. The composer files into the list being viewed, a `!list` prefix still wins, and it shows the day it read from the draft with a × to save without it. Snapshots carry every dump and home's grouping only while the window is open (`snapshot(full)`), which keeps the panel's cost per change small. The app refreshes the snapshot at midnight, when Today moves on. → `EngineTests.swift` `readsDaysAndGroupsHomeLikeTheWebApp`
+- **Capture panel:** it shows the day the draft names beside the list chips, and the dump gets that day.
 - **Activation:** the app is an accessory (menu bar only) until the notebook or Settings window opens. It then becomes a regular app with a Dock icon and a main menu, and switches back when those windows close. The main menu also supplies the Edit shortcuts that text fields need.
 - **Capture panel keys:** the panel swallows ⌘Q, ⌘H and ⌘M, so they never act on an app the user can't see. ⌘W closes it and ⌘O opens the notebook.
 - **Quitting:** SIGTERM quits through the normal save path, and `mac:install` relies on this. Start termination from the run loop, never from inside a main-queue block, because saving needs the main queue.
@@ -45,3 +46,5 @@ Claude has no Screen Recording permission, so `screencapture` fails. To check a 
 1. Add a temporary test target that builds an `AppModel` on a scratch data directory with sample dumps.
 2. Host the view in an `NSHostingView` inside an `NSWindow`, and write PNGs with `bitmapImageRepForCachingDisplay` and `cacheDisplay`.
 3. Run it with `swift test --filter`, look at the images, then delete the target.
+
+This draws plain lists, but not toolbar items, vibrant panels or sheets, and the notebook's home came out blank although printing the window's view tree showed its rows laid out. Check those in the running app.

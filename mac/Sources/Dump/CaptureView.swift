@@ -35,9 +35,15 @@ struct CaptureView: View {
       .padding(.top, 18)
       .padding(.bottom, 14)
 
-      ListChips(model: model)
-        .padding(.horizontal, 20)
-        .padding(.bottom, 14)
+      HStack(spacing: 10) {
+        ListChips(model: model)
+        // The day the draft names, which the dump gets.
+        if let due = model.draftDue {
+          DueBadge(due: due).font(.system(size: 12)).fixedSize()
+        }
+      }
+      .padding(.horizontal, 20)
+      .padding(.bottom, 14)
 
       if let problem = model.captureError ?? model.snapshot.storageError ?? model.openError {
         Label(problem, systemImage: "exclamationmark.triangle.fill")

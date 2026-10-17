@@ -194,3 +194,48 @@ struct ListEditor: View {
     }
   }
 }
+
+/// Moves dumps to a day picked on a calendar, or takes their day away.
+struct PickDay: View {
+  let model: AppModel
+  let ids: [String]
+  @Environment(\.dismiss) private var dismiss
+  @State private var day = Date.now
+
+  var body: some View {
+    let items = model.snapshot.dumps.filter { ids.contains($0.id) }
+    let dated = items.contains { $0.due != nil }
+    VStack(alignment: .leading, spacing: 16) {
+      VStack(alignment: .leading, spacing: 4) {
+        Text("Pick a day.").font(.title2.weight(.semibold))
+        Text(items.count == 1 ? items[0].text : "\(items.count) dumps")
+          .foregroundStyle(.secondary)
+          .lineLimit(2)
+      }
+      DatePicker("Day", selection: $day, displayedComponents: .date)
+        .datePickerStyle(.graphical)
+        .labelsHidden()
+      HStack {
+        if dated {
+          Button("Clear Date", role: .destructive) {
+            model.setDue(ids, nil)
+            dismiss()
+          }
+        }
+        Spacer()
+        Button("Cancel") { dismiss() }
+          .keyboardShortcut(.cancelAction)
+        Button("Move to \(Due.label(Due.key(day)))") {
+          model.setDue(ids, Due.key(day))
+          dismiss()
+        }
+        .keyboardShortcut(.defaultAction)
+      }
+    }
+    .padding(24)
+    .frame(width: 360)
+    .onAppear {
+      if let due = items.first?.due, let date = Due.date(due) { day = date }
+    }
+  }
+}

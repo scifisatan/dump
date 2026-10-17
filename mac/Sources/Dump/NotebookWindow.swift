@@ -2,9 +2,10 @@ import AppKit
 import DumpKit
 import SwiftUI
 
-/// A view of the notebook, as in the web app: the inbox (every open dump), one list, or Done.
+/// A view of the notebook, as in the web app: home (every open dump, ending in Today), one list,
+/// or Done.
 enum Place: Hashable {
-  case inbox
+  case home
   case list(String)
   case done
 }
@@ -22,15 +23,23 @@ enum ListEditing: Identifiable {
   }
 }
 
+/// Dumps whose day is being picked on a calendar.
+struct DayPicking: Identifiable {
+  let ids: [String]
+  var id: String { ids.joined(separator: " ") }
+}
+
 /// What the notebook window shows, apart from the notebook itself.
 @MainActor @Observable
 final class NotebookState {
-  /// The sidebar selection; nil (nothing selected) shows the inbox.
-  var place: Place? = .inbox
+  var place = Place.home
   var query = ""
+  /// The composer's text; an empty Today's examples fill it.
+  var draft = ""
   var editing: ListEditing?
   var sortingInbox = false
-  /// A dump to select and scroll to when its view opens, after "Show in Inbox" from a search.
+  var pickingDay: DayPicking?
+  /// A dump to select and scroll to when its view opens, after "Show in Home" from a search.
   var reveal: String?
 }
 
@@ -69,7 +78,7 @@ final class NotebookWindowController: NSObject, NSWindowDelegate {
   }
 
   /// Edit ▸ Find. SwiftUI offers no way to focus a search field before macOS 15, so this finds
-  /// the AppKit field `searchable` draws, in the sidebar or the toolbar.
+  /// the AppKit field `searchable` draws in the toolbar.
   func focusSearch() {
     show()
     guard let window, let field = window.contentView?.superview?.firstDescendant(of: NSSearchField.self)

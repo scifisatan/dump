@@ -64,7 +64,7 @@ func run() async throws {
   try await waitFor("sync") { engine.snapshot()?.sync == .synced }
   print("synced profile \(profile.id)")
   for text in options.captures {
-    let captured = try engine.capture(text, list: options.list)
+    let captured = try engine.capture(text, list: options.list, due: engine.due(forDraft: text))
     print("captured \(captured.id) list=\(captured.list ?? "inbox")")
   }
   for text in options.expected {

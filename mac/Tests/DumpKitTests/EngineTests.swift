@@ -13,9 +13,9 @@ struct EngineTests {
     let first = try Engine(directory: directory)
     try await first.open(profile)
     #expect(first.snapshot()?.sync == .local)
-    let filed = try first.capture("!buy warm floor lamp #reading", list: nil)
-    let chosen = try first.capture("call the bank", list: "todo")
-    let unfiled = try first.capture("an idea for later", list: nil)
+    let filed = try first.capture("!buy warm floor lamp #reading", list: nil, due: nil)
+    let chosen = try first.capture("call the bank", list: "todo", due: nil)
+    let unfiled = try first.capture("an idea for later", list: nil, due: nil)
     #expect(filed.list == "buy")
     #expect(chosen.list == "todo")
     #expect(unfiled.list == nil)
@@ -38,16 +38,16 @@ struct EngineTests {
     #expect(engine.list(forDraft: "!todo pay rent") == "todo")
     #expect(engine.list(forDraft: "!someday pay rent") == nil)
     #expect(engine.list(forDraft: "no prefix") == nil)
-    #expect(try engine.capture("!watch Dune part two", list: "buy").list == "watch")
-    #expect(throws: EngineError.self) { try engine.capture("   ", list: nil) }
+    #expect(try engine.capture("!watch Dune part two", list: "buy", due: nil).list == "watch")
+    #expect(throws: EngineError.self) { try engine.capture("   ", list: nil, due: nil) }
     try await engine.close()
   }
 
   @Test func actsOnDumpsAndListsLikeTheWebApp() async throws {
     let engine = try Engine(directory: directory)
     try await engine.open(Profile(server: nil))
-    let idea = try engine.capture("an idea #later", list: nil)
-    let errand = try engine.capture("call the bank", list: "todo")
+    let idea = try engine.capture("an idea #later", list: nil, due: nil)
+    let errand = try engine.capture("call the bank", list: "todo", due: nil)
     #expect(engine.snapshot()?.dumps.isEmpty == true)
     #expect(try #require(engine.snapshot(full: true)).dumps.first { $0.id == idea.id }?.tags == ["later"])
 
@@ -74,6 +74,32 @@ struct EngineTests {
     try engine.remove(idea.id)
     #expect(engine.snapshot(full: true)?.dumps.isEmpty == true)
     #expect(throws: EngineError("This dump is no longer in your notebook.")) { try engine.remove(idea.id) }
+    try await engine.close()
+  }
+
+  @Test func readsDaysAndGroupsHomeLikeTheWebApp() async throws {
+    let engine = try Engine(directory: directory)
+    try await engine.open(Profile(server: nil))
+    let friday = try #require(engine.due(forDraft: "submit my application by friday"))
+    #expect(friday.range(of: #"^\d{4}-\d{2}-\d{2}$"#, options: .regularExpression) != nil)
+    #expect(engine.due(forDraft: "sat down to write") == nil)
+    let dated = try engine.capture("submit my application by friday", list: nil, due: friday)
+    let plain = try engine.capture("lunch tomorrow", list: nil, due: nil)
+    #expect(dated.due == friday)
+    #expect(plain.due == nil)
+
+    try engine.setDue(plain.id, "2020-01-05")
+    var home = try #require(engine.snapshot(full: true)).home
+    #expect(home.overdue == [plain.id])
+    #expect(home.due.isEmpty)
+    #expect(home.dumped.isEmpty)
+    try engine.setDue(plain.id, nil)
+    home = try #require(engine.snapshot(full: true)).home
+    #expect(home.overdue.isEmpty)
+    #expect(home.dumped == [plain.id])
+    #expect(try #require(engine.snapshot(full: true)).dumps.first { $0.id == dated.id }?.due == friday)
+    #expect(engine.snapshot()?.home == .empty)
+    #expect(throws: EngineError.self) { try engine.setDue(plain.id, "friday") }
     try await engine.close()
   }
 

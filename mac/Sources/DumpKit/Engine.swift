@@ -90,9 +90,16 @@ public final class Engine {
     return value.toString()
   }
 
+  /// The day the draft names (YYYY-MM-DD), if any, read as the web composer reads it.
+  public func due(forDraft text: String) -> String? {
+    guard let value = try? call("dueFor", [text]), value.isString else { return nil }
+    return value.toString()
+  }
+
   /// Saves a dump synchronously. `list` files it unless the text names a list with `!list`.
-  public func capture(_ text: String, list: String?) throws -> Captured {
-    let json = try call("capture", [text, list ?? NSNull()]).toString() ?? ""
+  /// `due` is the day the composer showed (usually `due(forDraft:)`), or nil for none.
+  public func capture(_ text: String, list: String?, due: String?) throws -> Captured {
+    let json = try call("capture", [text, list ?? NSNull(), due ?? NSNull()]).toString() ?? ""
     return try JSONDecoder().decode(Captured.self, from: Data(json.utf8))
   }
 
@@ -100,6 +107,11 @@ public final class Engine {
 
   public func setDone(_ id: String, _ done: Bool) throws {
     try call("setDone", [id, done])
+  }
+
+  /// Moves a dump to another day (YYYY-MM-DD), or takes its day away (nil).
+  public func setDue(_ id: String, _ due: String?) throws {
+    try call("setDue", [id, due ?? NSNull()])
   }
 
   /// Files a dump by hand; nil returns it to the inbox.

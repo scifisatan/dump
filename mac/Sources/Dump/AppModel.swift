@@ -48,6 +48,7 @@ final class AppModel {
   let profiles = ProfileStore()
   private let keys = OwnerKeys()
   private let defaults = UserDefaults.standard
+  @ObservationIgnored private var dayChange: NSObjectProtocol?
 
   private enum Keys {
     static let shortcut = "shortcut"
@@ -67,6 +68,12 @@ final class AppModel {
     engine.ownerKey = { [keys] in keys.read($0) }
     engine.origin = { [weak self] url in self?.origin(for: url) ?? ClientOrigin.standard(for: url) }
     engine.onChange = { [weak self] in self?.refresh() }
+    // Home's Today moves on at midnight, though nothing in the notebook changed.
+    dayChange = NotificationCenter.default.addObserver(
+      forName: .NSCalendarDayChanged, object: nil, queue: .main
+    ) { [weak self] _ in
+      MainActor.assumeIsolated { self?.refresh() }
+    }
   }
 
   /// Opens the saved notebook, or starts one on this Mac so capture works right away.
@@ -98,13 +105,15 @@ final class AppModel {
 
   /// The list the draft's own `!list` prefix names, which wins over the chosen one.
   var prefixList: String? { engine.list(forDraft: draft) }
+  /// The day the draft names, which the dump gets.
+  var draftDue: String? { engine.due(forDraft: draft) }
   var targetList: String? { prefixList ?? chosenList }
 
   /// Saves the draft. Returns what was saved, or nil (with `captureError` set) when nothing was.
   func capture() -> Captured? {
     guard !draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return nil }
     do {
-      let captured = try engine.capture(draft, list: chosenList)
+      let captured = try engine.capture(draft, list: chosenList, due: draftDue)
       draft = ""
       chosenList = nil
       captureError = nil
@@ -138,6 +147,11 @@ final class AppModel {
   /// Files dumps by hand; nil returns them to the inbox.
   func file(_ ids: some Sequence<String>, to list: String?) {
     perform { for id in ids { try engine.file(id, list: list) } }
+  }
+
+  /// Moves dumps to a day (YYYY-MM-DD), or takes their day away (nil).
+  func setDue(_ ids: some Sequence<String>, _ due: String?) {
+    perform { for id in ids { try engine.setDue(id, due) } }
   }
 
   func remove(_ ids: some Sequence<String>) {

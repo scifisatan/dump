@@ -15,7 +15,7 @@ Open the web app and choose **Get started**. Then either connect your server (en
 | | |
 | --- | --- |
 | Capture | Type and press Enter. Shift+Enter adds a line, and `/` focuses the composer. |
-| Dates | Write the day in the dump: `submit the form by friday`, `dentist tomorrow`, `oct 24`, `in 3 days`. The composer shows the day before you send; its × sends the dump without one. Home is one list of everything, ending in **Today** just above the composer: what's overdue, due today and coming up, then what you dumped today. Scroll up for older dumps. Change or clear a day from the date on the card. The phone app works the same way; the Mac app keeps a dump's day but doesn't show it yet. |
+| Dates | Write the day in the dump: `submit the form by friday`, `dentist tomorrow`, `oct 24`, `in 3 days`. The composer shows the day before you send; its × sends the dump without one. Home is one list of everything, ending in **Today** just above the composer: what's overdue, due today and coming up, then what you dumped today. Scroll up for older dumps. Change or clear a day from the date on the card. The Mac and phone apps work the same way. |
 | File as you type | Start with `!list`. For example, `!buy warm floor lamp #reading` files to Buy and adds the tag `reading`. The default lists are `!ideas`, `!buy`, `!watch`, `!decor` and `!todo`; for list names with spaces, use hyphens: `!weekend-plans`. |
 | Auto-file | With Jev on, other dumps show "Sorting…", then move to Jev's pick, or to To do when Jev is unsure. If you file a dump first, your choice wins. |
 | Lists | Open one from search (Ctrl/Cmd+K) or by tapping its name on a dump. Create one with **New list** in search; edit or delete one with the pencil in its header. |
@@ -28,7 +28,7 @@ A device-only notebook never leaves the browser. Safari clears site data after s
 
 ## Mac app
 
-A menu bar app: press **⇧⌘Space**, type, press Return. In the panel, Tab or ⌘0–9 picks a list, and Escape closes it but keeps the draft. **Open Notebook** (⌘O) opens a window with your inbox, lists, Done and search; right-click a dump to see every action. The app runs the web app's own core, so it works offline, files with `!list`, lets Jev sort, and syncs with your server.
+A menu bar app: press **⇧⌘Space**, type, press Return. In the panel, Tab or ⌘0–9 picks a list, and Escape closes it but keeps the draft. The panel shows the day it read from your text. **Open Notebook** (⌘O) opens the same home as the web app, ending in Today, with search in the toolbar and your lists and Done in its **Lists** menu; click a dump's list to open it, click its day to change it, and right-click a dump to see every action. The app runs the web app's own core, so it works offline, files with `!list`, lets Jev sort, and syncs with your server.
 
 ```bash
 npm run mac:install

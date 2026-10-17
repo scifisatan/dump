@@ -223,7 +223,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
   @objc private func openNotebook() { notebook.show() }
 
-  @objc private func openInbox() { notebook.show(.inbox) }
+  @objc private func openInbox() { notebook.show(.home) }
 
   @objc private func newList() { notebook.newList() }
 

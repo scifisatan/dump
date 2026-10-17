@@ -10,6 +10,7 @@ import {
   requestTicket,
   serverUrl,
 } from '../../src/core/connection';
+import { agenda, parseDue } from '../../src/shared/due';
 import { listPrefix, listSchema, type Dump } from '../../src/shared/schema';
 import { native } from './native';
 import { deviceEvents, macPlatform } from './platform';
@@ -29,15 +30,19 @@ function item(dump: Dump, snapshot: Snapshot) {
     tags: dump.tags,
     done: dump.done,
     url: dump.url,
+    due: dump.due,
     createdAt: dump.created_at,
     sorting: snapshot.sorting.has(dump.id),
   };
 }
 
-// What the panel and menu show: a compact view of the snapshot. `full` adds every dump, for the
-// notebook window, which is not worth encoding on each change while the window is closed.
+// What the panel and menu show: a compact view of the snapshot. `full` adds every dump and how
+// home groups them (src/shared/due.ts `agenda`), for the notebook window, which is not worth
+// encoding on each change while the window is closed.
 function view(snapshot: Snapshot, full: boolean) {
   const active = snapshot.dumps.filter((dump) => !dump.deleted);
+  const ids = (dumps: Dump[]) => dumps.map((dump) => dump.id);
+  const plan = agenda(full ? active.filter((dump) => !dump.done) : [], Date.now());
   return {
     ready: snapshot.ready,
     sync: snapshot.sync,
@@ -49,6 +54,13 @@ function view(snapshot: Snapshot, full: boolean) {
       .map(({ id, label, color }) => ({ id, label, color })),
     recent: active.slice(0, RECENT).map((dump) => item(dump, snapshot)),
     dumps: full ? active.map((dump) => item(dump, snapshot)) : [],
+    home: {
+      earlier: ids(plan.earlier),
+      overdue: ids(plan.overdue),
+      due: ids(plan.due),
+      upcoming: ids(plan.upcoming),
+      dumped: ids(plan.dumped),
+    },
     inbox: active.filter((dump) => !dump.done && !dump.list).length,
   };
 }
@@ -87,16 +99,27 @@ const engine = {
     return client ? (listPrefix(text, client.getSnapshot().lists)?.list ?? null) : null;
   },
 
+  // The day this draft names (YYYY-MM-DD), if any, for the composer to show before it is saved.
+  dueFor(text: string) {
+    return parseDue(text, Date.now());
+  },
+
   // Captures synchronously, like the web composer. `list` files it when the text has no prefix
-  // of its own; otherwise Jev sorts it afterwards when the server has it.
-  capture(text: string, list: string | null) {
-    const dump = current().capture(text, list);
-    return JSON.stringify({ id: dump.id, list: dump.list });
+  // of its own; otherwise Jev sorts it afterwards when the server has it. `due` is the day the
+  // composer showed, or null for none.
+  capture(text: string, list: string | null, due: string | null) {
+    const dump = current().capture(text, list, due);
+    return JSON.stringify({ id: dump.id, list: dump.list, due: dump.due });
   },
 
   // The core's dump actions (src/core/client.ts). All are final; there is no undo.
   setDone(id: string, done: boolean) {
     current().setDone(id, done);
+  },
+
+  // Moves a dump to another day (YYYY-MM-DD), or takes its day away (null).
+  setDue(id: string, due: string | null) {
+    current().setDue(id, due);
   },
 
   file(id: string, list: string | null) {

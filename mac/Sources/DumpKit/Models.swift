@@ -66,10 +66,24 @@ public struct Snapshot: Codable, Equatable, Sendable {
     public var tags: [String]
     public var done: Bool
     public var url: String?
+    /// The day the dump is for, as YYYY-MM-DD in this Mac's time zone (src/shared/due.ts).
+    public var due: String?
     public var createdAt: Double
     public var sorting: Bool
 
     public var created: Date { Date(timeIntervalSince1970: createdAt / 1000) }
+  }
+
+  /// How home groups the open dumps (src/shared/due.ts `agenda`), as dump IDs in display order:
+  /// older undated dumps, then Today's sections. Empty unless the snapshot is full.
+  public struct Home: Codable, Equatable, Sendable {
+    public var earlier: [String]
+    public var overdue: [String]
+    public var due: [String]
+    public var upcoming: [String]
+    public var dumped: [String]
+
+    public static let empty = Home(earlier: [], overdue: [], due: [], upcoming: [], dumped: [])
   }
 
   public var ready: Bool
@@ -81,12 +95,13 @@ public struct Snapshot: Codable, Equatable, Sendable {
   public var recent: [Item]
   /// Every dump, newest first; only in a full snapshot (`Engine.snapshot(full:)`).
   public var dumps: [Item]
+  public var home: Home
   /// Open dumps not filed in a list.
   public var inbox: Int
 
   public static let closed = Snapshot(
     ready: false, sync: .local, syncError: nil, saving: false, storageError: nil, lists: [],
-    recent: [], dumps: [], inbox: 0)
+    recent: [], dumps: [], home: .empty, inbox: 0)
 
   public func list(_ id: String?) -> List? { lists.first { $0.id == id } }
 }
@@ -94,6 +109,7 @@ public struct Snapshot: Codable, Equatable, Sendable {
 public struct Captured: Codable, Equatable, Sendable {
   public var id: String
   public var list: String?
+  public var due: String?
 }
 
 /// The Origin header the app sends. Servers answer only the web app origins they list in
