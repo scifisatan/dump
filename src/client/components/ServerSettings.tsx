@@ -1,16 +1,15 @@
 import { useState } from 'react';
 import { LoaderCircle } from 'lucide-react';
 import { toast } from 'sonner';
-import { explainConnectionError, requestTicket, type ServerLocation } from '../../core/connection';
-import { activateProfile, profileForServer, readProfiles, saveKey } from '../profiles';
-import { client, currentProfile } from '../store';
+import type { ServerLocation } from '../../core/connection';
+import { registry } from '../profiles';
+import { session } from '../store';
 import { ServerConnection } from './ServerConnection';
 import { Button } from './ui/button';
 import { Input } from './ui/input';
 
 const note = 'text-xs leading-relaxed text-muted-foreground';
 
-// Shown when the server refused this device's key (wrong, or rotated to cut off a lost device).
 function SignIn({ server }: { server: ServerLocation }) {
   const [key, setKey] = useState('');
   const [busy, setBusy] = useState(false);
@@ -23,12 +22,10 @@ function SignIn({ server }: { server: ServerLocation }) {
         setBusy(true);
         setError('');
         try {
-          await requestTicket(server.baseUrl, key);
-          saveKey(currentProfile.id, key);
-          client.reconnect();
+          await session.signIn(key);
           toast('Signed in. Syncing again.');
         } catch (cause) {
-          setError(explainConnectionError(cause, 'Could not sign in.'));
+          setError(cause instanceof Error ? cause.message : 'Could not sign in.');
         } finally {
           setBusy(false);
         }
@@ -76,22 +73,15 @@ function SignIn({ server }: { server: ServerLocation }) {
 }
 
 export function ServerSettings({ signedOut }: { signedOut: boolean }) {
-  const server = currentProfile.server;
-  const saved = readProfiles().profiles.filter((profile) => profile.id !== currentProfile.id);
+  const server = session.get().profile.server;
+  const saved = registry.others();
   return (
     <div className="space-y-3">
       {server ? (
         <>
           <p className={`${note} break-all`}>Current: {server.baseUrl}</p>
           {signedOut && <SignIn server={server} />}
-          <ServerConnection
-            action="Switch to this server"
-            onConnect={async (next, key) => {
-              const profile = profileForServer(next);
-              saveKey(profile.id, key);
-              await activateProfile(profile, client.stop);
-            }}
-          />
+          <ServerConnection action="Switch to this server" onConnect={session.connect} />
           <p className={note}>
             Switching opens a separate notebook. Saved thoughts stay with their server; use export
             and import to move them. Other open tabs keep their current connection until reloaded.
@@ -111,10 +101,7 @@ export function ServerSettings({ signedOut }: { signedOut: boolean }) {
                 Your notes on this device will be added to this server’s notebook.
               </p>
             }
-            onConnect={async (next, key) => {
-              saveKey(currentProfile.id, key);
-              await activateProfile({ ...currentProfile, server: next }, client.stop);
-            }}
+            onConnect={session.connect}
           />
         </>
       )}
@@ -127,9 +114,11 @@ export function ServerSettings({ signedOut }: { signedOut: boolean }) {
               variant="outline"
               className="h-auto min-h-10 w-full justify-start text-left text-xs break-all whitespace-normal"
               onClick={() =>
-                void activateProfile(profile, client.stop).catch((cause) =>
-                  toast.error(cause instanceof Error ? cause.message : 'Could not switch.'),
-                )
+                void session
+                  .switchTo(profile)
+                  .catch((cause) =>
+                    toast.error(cause instanceof Error ? cause.message : 'Could not switch.'),
+                  )
               }
             >
               {profile.server?.baseUrl ?? 'This device only'}

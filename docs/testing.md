@@ -7,10 +7,10 @@ Owns `tests/` and `playwright.config.ts`. The Mac tests are covered in [mac.md](
 - `npm test` runs Vitest through Vite+ (`vp test`). Tests import from `vite-plus/test`. The PWA plugin is skipped when `VITEST` is set, because unit tests are plain Node code.
   - `tests/domain.test.ts`: the capture parser, synced lists, and the TinyBase merge contract.
   - `tests/client.test.ts`: the client lifecycle and isolation, saving, and dump and list actions. These go through `createDumpClient` with an in-memory fake platform (`platform()` at the top of the file).
-  - `tests/connection.test.ts`: server URLs, the ping shape, identity pinning, storage names, origins and error messages.
+  - `tests/connection.test.ts`: server URLs, finding a server, storage names, the notebook registry, origins and error messages.
   - `tests/auth.test.ts`: owner keys and sync tickets.
   - `tests/classify.test.ts`: Jev request and response mapping.
-  - `tests/mobile-views.test.ts`: the phone app's view helpers (`mobile/src/views.ts`): day rows for its inverted list, and search.
+  - `tests/views.test.ts`: the views every client shows (`src/core/views.ts`): Today's sections and summary, Sort inbox, attention, search and labels, plus the phone's inverted rows (`mobile/src/views.ts`).
 - Test through public interfaces with fakes passed in. See [CODING_STANDARDS.md](../CODING_STANDARDS.md) for the no-module-mocks rule.
 
 ## End-to-end tests

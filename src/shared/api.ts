@@ -7,7 +7,6 @@ export const pingSchema = z.object({
   app: z.literal('dump'),
   instanceId: instanceIdSchema,
   syncProtocol: z.literal('tinybase-ws'),
-  // `unconfigured` servers have no usable OWNER_KEY yet and refuse everything else.
   auth: z.enum(['owner-key', 'unconfigured']),
   mode: z.enum(['local', 'cloud']),
   classify: z.boolean(),

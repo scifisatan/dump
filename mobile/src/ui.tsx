@@ -65,7 +65,6 @@ export function Icon({
   );
 }
 
-// A list's color dot; hollow for the inbox.
 export function ListDot({ color, size = 8 }: { color?: string; size?: number }) {
   const colors = useColors();
   return (
@@ -136,7 +135,6 @@ export function EmptyState({
   );
 }
 
-// Sync state in one line, as the Mac shows it.
 export function syncLabel(sync: SyncState) {
   switch (sync) {
     case 'synced':
@@ -155,10 +153,6 @@ export function syncLabel(sync: SyncState) {
   }
 }
 
-// Sync needs the owner's attention: it is offline, paused or signed out. Settings carries a mark.
-export const syncAlert = (sync: SyncState) =>
-  sync === 'offline' || sync === 'error' || sync === 'signed-out';
-
 export function syncTint(sync: SyncState, colors: Colors) {
   switch (sync) {
     case 'synced':
@@ -175,7 +169,6 @@ export function syncTint(sync: SyncState, colors: Colors) {
   }
 }
 
-// Grouped rows, like iOS Settings.
 export function Section({
   title,
   footer,
@@ -279,7 +272,6 @@ export type HeaderItem =
       icon: IconName;
       onPress: () => void;
       prominent?: boolean;
-      // A red mark that something behind the button needs attention.
       alert?: boolean;
     }
   | {

@@ -1,7 +1,5 @@
 import Foundation
 
-/// fetch() for the engine: no cookies, no cache, no redirects, and the Origin header the server
-/// expects. Callbacks arrive on the main thread.
 @MainActor
 final class HTTPBridge: NSObject, URLSessionTaskDelegate {
   struct Response {
@@ -9,17 +7,14 @@ final class HTTPBridge: NSObject, URLSessionTaskDelegate {
     var headers = "[]"
     var body = ""
     var url = ""
-    /// Set for a network failure; fetch() rejects with a TypeError carrying it.
     var error: String?
   }
 
   private var session: URLSession!
   private var tasks: [Int: URLSessionDataTask] = [:]
-  private let origin: (URL) -> String
   private let respond: (Int, Response) -> Void
 
-  init(origin: @escaping (URL) -> String, respond: @escaping (Int, Response) -> Void) {
-    self.origin = origin
+  init(respond: @escaping (Int, Response) -> Void) {
     self.respond = respond
     super.init()
     let configuration = URLSessionConfiguration.ephemeral
@@ -39,7 +34,6 @@ final class HTTPBridge: NSObject, URLSessionTaskDelegate {
     request.httpMethod = method
     let pairs = (try? JSONDecoder().decode([[String]].self, from: Data(headers.utf8))) ?? []
     for pair in pairs where pair.count == 2 { request.setValue(pair[1], forHTTPHeaderField: pair[0]) }
-    request.setValue(origin(target), forHTTPHeaderField: "Origin")
     request.httpBody = body.map { Data($0.utf8) }
     let task = session.dataTask(with: request) { data, response, error in
       MainActor.assumeIsolated { self.finish(id, url, data, response, error) }

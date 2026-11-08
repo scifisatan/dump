@@ -22,7 +22,6 @@ function deferred<T>() {
   return { promise, resolve };
 }
 
-// Explicit in-memory platform exercises the same core used by the browser; no module mocks.
 function platform({ deviceOnly = false } = {}) {
   let content: MergeableContent | undefined;
   const state = {
@@ -252,7 +251,6 @@ describe('dump and list actions', () => {
     host.state.classify = async () => 'ideas';
     client.deleteList('buy');
     await client.stop();
-    // Unfiled dumps are sorted again on the next load.
     const reopened = createDumpClient(host.adapter);
     await reopened.start();
     await vi.waitFor(() => {

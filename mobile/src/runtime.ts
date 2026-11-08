@@ -6,7 +6,7 @@ import 'core-js/actual/structured-clone';
 import 'core-js/actual/url';
 import 'core-js/actual/url-search-params';
 import { getRandomValues, randomUUID } from 'expo-crypto';
-import { clientOrigin } from './origin';
+import { origin } from './origin';
 
 const install = (name: string, value: unknown) =>
   Object.defineProperty(globalThis, name, { value, writable: true, configurable: true });
@@ -78,7 +78,7 @@ install('fetch', (input: RequestInfo | URL, init: RequestInit = {}) => {
   const url = typeof input === 'string' ? input : input instanceof URL ? input.href : input.url;
   if (!serverApi(url)) return nativeFetch(input, init);
   const headers = new Headers(init.headers);
-  headers.set('Origin', clientOrigin(url));
+  headers.set('Origin', origin.for(url));
   return nativeFetch(input, { ...init, headers });
 });
 
@@ -93,11 +93,7 @@ const NativeWebSocket = globalThis.WebSocket as unknown as NativeSocket;
 class OriginWebSocket extends NativeWebSocket {
   constructor(url: string | URL, protocols?: string | string[]) {
     const href = String(url);
-    super(
-      href,
-      protocols,
-      serverApi(href) ? { headers: { origin: clientOrigin(href) } } : undefined,
-    );
+    super(href, protocols, serverApi(href) ? { headers: { origin: origin.for(href) } } : undefined);
   }
 }
 install('WebSocket', OriginWebSocket);

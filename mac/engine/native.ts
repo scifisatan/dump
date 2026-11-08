@@ -6,25 +6,28 @@ type Native = {
   clearTimer(id: number): void;
   randomBytes(length: number): number[];
   uuid(): string;
-  // Answers with host.response. The host adds the Origin header the server expects.
+  // Answers with host.response.
   request(id: number, method: string, url: string, headers: string, body: string | null): void;
   cancelRequest(id: number): void;
   // Answers with host.socket events: open, message, sent, error, close.
-  socketOpen(id: number, url: string): void;
+  socketOpen(id: number, url: string, origin: string): void;
   socketSend(id: number, data: string): void;
   socketClose(id: number, code: number, reason: string): void;
   // Notebook files live in the app's data folder; `name` is a bare file name.
   readFile(name: string): string | null;
   // Answers with host.written. Writes are atomic and applied in order.
   writeFile(id: number, name: string, content: string): void;
-  isOnline(): boolean;
+  // Values in the app's user defaults; null clears one.
+  readSetting(name: string): string | null;
+  writeSetting(name: string, value: string | null): void;
+  // Owner keys live in the Keychain. Saving throws when the Keychain refuses.
   ownerKey(profileId: string): string | null;
+  saveOwnerKey(profileId: string, key: string, server: string): void;
   changed(): void;
 };
 
 export const native = (globalThis as unknown as { __native: Native }).__native;
 
-// Callbacks the host calls into. Modules register their handlers here.
 export const host: Record<string, (...args: never[]) => void> = {};
 (globalThis as unknown as { __host: typeof host }).__host = host;
 

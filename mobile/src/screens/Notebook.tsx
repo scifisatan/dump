@@ -8,34 +8,16 @@ import {
   Text,
   View,
 } from 'react-native';
+import { DAY_EXAMPLES, dumpsIn, needsAttention, notebook } from '../../../src/core/views';
+import { prefixFor } from '../../../src/shared/schema';
 import type { ScreenProps } from '../App';
 import { Composer, KeyboardSpace, type ComposerHandle } from '../Composer';
 import { DumpRow, failed } from '../DumpRow';
 import { useSession, useSnapshot } from '../notebook';
 import { useColors } from '../theme';
-import {
-  EmptyState,
-  headerItems,
-  Icon,
-  icons,
-  Mark,
-  syncAlert,
-  syncLabel,
-  type HeaderItem,
-} from '../ui';
-import {
-  dumpsIn,
-  homeRows,
-  notebook,
-  placeTitle,
-  prefixFor,
-  rows,
-  unfiled,
-  type Row,
-} from '../views';
+import { EmptyState, headerItems, Icon, icons, Mark, syncLabel, type HeaderItem } from '../ui';
+import { homeRows, placeTitle, rows, type Row } from '../views';
 
-// One view, as on the web and the Mac: home (older dumps by day, then Today just above the
-// composer), a list, or Done. The newest dumps sit at the bottom, next to the composer.
 export function NotebookScreen({ navigation, route }: ScreenProps<'Notebook'>) {
   const { place, reveal } = route.params;
   const { client } = useSession();
@@ -45,8 +27,9 @@ export function NotebookScreen({ navigation, route }: ScreenProps<'Notebook'>) {
   const list = place.kind === 'list' ? book.list(place.id) : undefined;
   const gone = snapshot.ready && place.kind === 'list' && !list;
   const home = place.kind === 'home';
-  const data = home ? homeRows(book) : rows(dumpsIn(place, book));
-  const sortable = home ? unfiled(book).length : 0;
+  const now = Date.now();
+  const data = home ? homeRows(book, now) : rows(dumpsIn(place, book), now);
+  const sortable = home ? book.unfiled.length : 0;
   const done = book.done.length;
   const sync = snapshot.sync;
   const storageError = snapshot.storageError;
@@ -54,7 +37,6 @@ export function NotebookScreen({ navigation, route }: ScreenProps<'Notebook'>) {
   const composer = useRef<ComposerHandle>(null);
   const [highlight, setHighlight] = useState(reveal);
 
-  // A list deleted here or on another device leaves its view.
   useEffect(() => {
     if (gone) navigation.popToTop();
   }, [gone, navigation]);
@@ -114,9 +96,7 @@ export function NotebookScreen({ navigation, route }: ScreenProps<'Notebook'>) {
             ],
           ),
       });
-    // Search and Settings sit together on every view, as in the web app's top bar. Settings is
-    // where sync lives, so it carries a mark when sync needs attention.
-    const alert = syncAlert(sync) || storageError !== null;
+    const alert = needsAttention({ sync, storageError });
     items.push(
       {
         kind: 'button',
@@ -139,9 +119,6 @@ export function NotebookScreen({ navigation, route }: ScreenProps<'Notebook'>) {
     });
   }, [navigation, title, home, sortable, done, sync, storageError, place, client, colors]);
 
-  // After a search, start at the dump that was chosen. Home otherwise opens with Today's heading
-  // at the top when Today is taller than the screen, so overdue dumps are in view; the offset
-  // clamps at the bottom when Today fits.
   const revealIndex = reveal ? data.findIndex((row) => row.key === reveal) : -1;
   const todayIndex = home ? data.findIndex((row) => row.type === 'today') : -1;
   const [anchor] = useState(
@@ -249,7 +226,6 @@ export function NotebookScreen({ navigation, route }: ScreenProps<'Notebook'>) {
           contentContainerStyle={styles.content}
         />
       )}
-      {/* Done holds only finished dumps, so it has no composer. */}
       {place.kind === 'done' ? (
         <KeyboardSpace />
       ) : (
@@ -287,9 +263,6 @@ export function confirmDeleteList(label: string, remove: () => void) {
     ],
   );
 }
-
-// Shown in an empty Today; each fills the composer, and its day shows before it is saved.
-const DAY_EXAMPLES = ['Call the bank tomorrow', 'Pay rent by friday', 'Book the dentist in 3 days'];
 
 function Empty({ place, prefix }: { place: 'list' | 'done'; prefix: string | null }) {
   if (place === 'done')

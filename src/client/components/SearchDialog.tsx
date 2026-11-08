@@ -1,5 +1,6 @@
 import { CalendarDays, CheckCheck, FileText, ListFilter, Plus, Settings } from 'lucide-react';
-import type { Collection, Dump } from '../../shared/schema';
+import { searchText, type Notebook } from '../../core/views';
+import type { Dump } from '../../shared/schema';
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from './ui/dialog';
 import {
   Command,
@@ -16,8 +17,7 @@ export function SearchDialog({
   onOpenChange,
   initialQuery,
   onQueryChange,
-  dumps,
-  lists,
+  book,
   navigate,
   select,
   settings,
@@ -27,8 +27,7 @@ export function SearchDialog({
   onOpenChange: (open: boolean) => void;
   initialQuery: string;
   onQueryChange: (query: string) => void;
-  dumps: Dump[];
-  lists: Collection[];
+  book: Notebook;
   navigate: (path: string) => void;
   select: (dump: Dump) => void;
   settings: () => void;
@@ -89,7 +88,7 @@ export function SearchDialog({
                 <Plus />
                 New list
               </CommandItem>
-              {lists.map((list) => (
+              {book.lists.map((list) => (
                 <CommandItem
                   key={list.id}
                   value={`List ${list.label}`}
@@ -102,10 +101,11 @@ export function SearchDialog({
             </CommandGroup>
             <CommandSeparator />
             <CommandGroup heading="Thoughts & links">
-              {dumps.map((dump) => (
+              {book.dumps.map((dump) => (
                 <CommandItem
                   key={dump.id}
-                  value={`${dump.id} ${dump.text} ${dump.tags.map((tag) => `#${tag}`).join(' ')} ${lists.find((list) => list.id === dump.list)?.label ?? 'Inbox'}`}
+                  // cmdk needs each value to be unique.
+                  value={`${dump.id} ${searchText(dump, book)}`}
                   onSelect={() => {
                     onOpenChange(false);
                     select(dump);
@@ -115,9 +115,7 @@ export function SearchDialog({
                   <span className="grid min-w-0 gap-0.75">
                     <span className="truncate">{dump.text}</span>
                     <small className="text-[10px] text-muted-foreground">
-                      {dump.done
-                        ? 'Done'
-                        : (lists.find((list) => list.id === dump.list)?.label ?? 'Inbox')}
+                      {dump.done ? 'Done' : book.listLabel(dump.list)}
                     </small>
                   </span>
                 </CommandItem>

@@ -1,11 +1,10 @@
 import { useState, type FormEvent } from 'react';
-import type { Collection } from '../../shared/schema';
+import { LIST_COLORS, paletteFor, type Collection } from '../../shared/schema';
 import { client } from '../store';
 import { Button } from './ui/button';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from './ui/dialog';
 import { Input } from './ui/input';
 
-const colors = ['#9b84d6', '#c49651', '#6395c3', '#849c74', '#cd7f86', '#849299'];
 export function ListEditor({
   list,
   close,
@@ -18,7 +17,7 @@ export function ListEditor({
   deleted?: (list: Collection) => void;
 }) {
   const [label, setLabel] = useState(list?.label ?? '');
-  const [color, setColor] = useState(list?.color ?? colors[0]);
+  const [color, setColor] = useState(list?.color.toLowerCase() ?? LIST_COLORS[0]);
   const [error, setError] = useState('');
   const [confirming, setConfirming] = useState(false);
   function remove() {
@@ -71,7 +70,7 @@ export function ListEditor({
           <fieldset>
             <legend className="mt-2 mb-3 text-[12px]">Color</legend>
             <div className="flex gap-3.25 p-1.25">
-              {colors.map((value) => (
+              {paletteFor(color).map((value) => (
                 <button
                   key={value}
                   type="button"

@@ -2,6 +2,7 @@ import { Hono } from 'hono';
 import { createMiddleware } from 'hono/factory';
 import type { Env } from './env';
 import { pingSchema } from '../shared/api';
+import { isLocalHost } from '../shared/hosts';
 import { bearer, createTicket, matchesKey, ownerKey, verifyTicket } from './auth';
 import { classifyRequestSchema, jevRequest, readJevResponse } from '../shared/classify';
 import { allowsOrigin } from './origins';
@@ -41,10 +42,10 @@ app.use('*', async (c, next) => {
   c.header('X-Frame-Options', 'DENY');
 });
 
+const notebookId = (env: Env) => env.DUMP.idFromName('me');
+
 const UNCONFIGURED = 'This server has no owner key yet. Set OWNER_KEY and redeploy.';
 
-// Everything except discovery needs the owner key: a bearer header on HTTP, and a ticket bought
-// with it on the WebSocket upgrade (see auth.ts).
 const requireOwner = createMiddleware<{ Bindings: Env; Variables: { ownerKey: string } }>(
   async (c, next) => {
     const key = ownerKey(c.env);
@@ -58,12 +59,11 @@ const requireOwner = createMiddleware<{ Bindings: Env; Variables: { ownerKey: st
 
 app
   .get('/api/ping', (c) => {
-    const hostname = new URL(c.req.url).hostname;
-    const mode = ['localhost', '127.0.0.1', '[::1]'].includes(hostname) ? 'local' : 'cloud';
+    const mode = isLocalHost(new URL(c.req.url).hostname) ? 'local' : 'cloud';
     const classify = !!c.env.JEV_API_KEY;
     // The namespace-scoped object ID is stable without waking the sync server before a
     // WebSocket exists (which would leave its initial peer handshake waiting for a timeout).
-    const instanceId = c.env.DUMP.idFromName('me').toString();
+    const instanceId = notebookId(c.env).toString();
     return c.json(
       pingSchema.parse({
         ok: true,
@@ -77,7 +77,7 @@ app
     );
   })
   .post('/api/sync-ticket', requireOwner, async (c) => {
-    const ticket = await createTicket(c.get('ownerKey'), c.env.DUMP.idFromName('me').toString());
+    const ticket = await createTicket(c.get('ownerKey'), notebookId(c.env).toString());
     return c.json({ ticket });
   })
   // Stateless proxy to Jev: the browser cannot call it directly (CORS) or hold the key.
@@ -106,14 +106,13 @@ app
   .get('/api/sync', async (c) => {
     if (c.req.header('Upgrade')?.toLowerCase() !== 'websocket')
       return c.text('WebSocket required', 426);
-    const id = c.env.DUMP.idFromName('me');
+    const id = notebookId(c.env);
     if (c.req.query('instance') !== id.toString())
       return c.text('Notebook identity changed. Reconnect from Settings.', 409);
     const key = ownerKey(c.env);
     if (!key) return c.text(UNCONFIGURED, 503);
     if (!(await verifyTicket(key, id.toString(), c.req.query('ticket') ?? '')))
       return c.text('Sync ticket rejected. Sign in again.', 401);
-    // The ticket stops here: the sync server only needs the upgrade itself.
     return c.env.DUMP.get(id).fetch(new Request('https://dump.internal/me', c.req.raw));
   });
 

@@ -1,18 +1,16 @@
 import Foundation
 
-/// WebSocket for the engine, on URLSessionWebSocketTask with the Origin header the server
-/// expects. Every socket ends with exactly one `close` event. Callbacks arrive on the main thread.
+/// WebSocket for the engine, on URLSessionWebSocketTask with the Origin header the engine
+/// chooses. Every socket ends with exactly one `close` event. Callbacks arrive on the main thread.
 @MainActor
 final class SocketBridge: NSObject, URLSessionWebSocketDelegate {
   private var session: URLSession!
   private var sockets: [Int: URLSessionWebSocketTask] = [:]
   private var opened: Set<Int> = []
-  private let origin: (URL) -> String
   /// (socket ID, event, data, close code): see `host.socket` in mac/engine/polyfills.ts.
   private let emit: (Int, String, Any, Int) -> Void
 
-  init(origin: @escaping (URL) -> String, emit: @escaping (Int, String, Any, Int) -> Void) {
-    self.origin = origin
+  init(emit: @escaping (Int, String, Any, Int) -> Void) {
     self.emit = emit
     super.init()
     let configuration = URLSessionConfiguration.ephemeral
@@ -21,16 +19,14 @@ final class SocketBridge: NSObject, URLSessionWebSocketDelegate {
     session = URLSession(configuration: configuration, delegate: self, delegateQueue: .main)
   }
 
-  func open(id: Int, url: String) {
+  func open(id: Int, url: String, origin: String) {
     guard let target = URL(string: url), ["ws", "wss"].contains(target.scheme ?? "") else {
       emit(id, "error", "", 0)
       emit(id, "close", "", 1006)
       return
     }
     var request = URLRequest(url: target, timeoutInterval: 30)
-    var originURL = URLComponents(url: target, resolvingAgainstBaseURL: false)
-    originURL?.scheme = target.scheme == "wss" ? "https" : "http"
-    request.setValue(origin(originURL?.url ?? target), forHTTPHeaderField: "Origin")
+    request.setValue(origin, forHTTPHeaderField: "Origin")
     let task = session.webSocketTask(with: request)
     // TinyBase sends large first syncs as 256 KB fragments; leave generous headroom.
     task.maximumMessageSize = 32 << 20

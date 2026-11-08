@@ -22,7 +22,6 @@ function Notifications() {
   const phone = useSyncExternalStore(subscribePhone, () => phoneQuery.matches);
   return (
     <Toaster
-      // Sit just below the app header so its actions and sync status stay reachable.
       position={phone ? 'top-center' : 'top-right'}
       offset={{ top: 76, right: 24 }}
       mobileOffset={{ top: 64, left: 12, right: 12 }}
@@ -33,12 +32,10 @@ function Notifications() {
   );
 }
 
-// While a screen's code loads, the loading screen from index.html stays up (see boot.ts).
 function Loading() {
   useLayoutEffect(holdBoot, []);
   return null;
 }
-// Runs after React's first commit, once any screen that is still loading holds the boot screen.
 function FirstCommit() {
   useLayoutEffect(releasePageLoad, []);
   return null;
@@ -79,8 +76,6 @@ ReactDOM.createRoot(document.getElementById('root')!).render(
           <Suspense fallback={<Loading />}>
             <Routes>
               <Route path="/marketing" element={<Marketing />} />
-              {/* Decided from local settings, not a redirect: returning visitors get their
-                  notebook at once and never load the landing page; new ones get onboarding. */}
               <Route path="*" element={hasNotebook() ? <App /> : <Marketing />} />
             </Routes>
           </Suspense>

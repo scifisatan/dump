@@ -1,27 +1,23 @@
 import { useState } from 'react';
 import { Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
+import { notebook } from '../../../src/core/views';
+import { LIST_COLORS, paletteFor } from '../../../src/shared/schema';
 import type { ScreenProps } from '../App';
 import { useSession, useSnapshot } from '../notebook';
 import { useColors } from '../theme';
 import { Button } from '../ui';
-import { notebook } from '../views';
 import { confirmDeleteList } from './Notebook';
 
-// The web app's palette (ListEditor.tsx).
-const COLORS = ['#9b84d6', '#c49651', '#6395c3', '#849c74', '#cd7f86', '#849299'];
-
-// Creates a list, or renames, recolors or deletes one.
 export function ListEditor({ navigation, route }: ScreenProps<'ListEditor'>) {
   const { client } = useSession();
   const book = notebook(useSnapshot());
   const colors = useColors();
   const existing = route.params.id ? book.list(route.params.id) : undefined;
   const [label, setLabel] = useState(existing?.label ?? '');
-  const [color, setColor] = useState(existing?.color.toLowerCase() ?? COLORS[0]);
+  const [color, setColor] = useState(existing?.color.toLowerCase() ?? LIST_COLORS[0]);
   const [error, setError] = useState<string | null>(null);
   const name = label.trim();
-  // A list colored elsewhere keeps its color as a choice.
-  const palette = COLORS.includes(color) ? COLORS : [...COLORS, color];
+  const palette = paletteFor(color);
 
   const save = () => {
     if (!name) return;

@@ -2,8 +2,6 @@ import AppKit
 import DumpKit
 import SwiftUI
 
-/// Sort inbox, as on the web (TriageDialog.tsx): one unfiled dump at a time. 1–9 file it in a
-/// list, → skips it, Delete removes it.
 struct SortInbox: View {
   let model: AppModel
   @Environment(\.dismiss) private var dismiss
@@ -11,8 +9,8 @@ struct SortInbox: View {
 
   var body: some View {
     let snapshot = model.snapshot
-    // Dumps Jev is still sorting are left to it.
-    let unfiled = snapshot.dumps.filter { !$0.done && $0.list == nil && !$0.sorting }
+    let byId = Dictionary(snapshot.dumps.map { ($0.id, $0) }, uniquingKeysWith: { first, _ in first })
+    let unfiled = snapshot.unfiled.compactMap { byId[$0] }
     let current = unfiled.isEmpty ? nil : unfiled[index % unfiled.count]
     VStack(alignment: .leading, spacing: 18) {
       VStack(alignment: .leading, spacing: 4) {
@@ -87,19 +85,15 @@ struct SortInbox: View {
   }
 }
 
-/// Creates a list, or renames, recolors or deletes one (ListEditor.tsx).
 struct ListEditor: View {
   let model: AppModel
   let editing: ListEditing
   var saved: (Snapshot.List) -> Void
   @Environment(\.dismiss) private var dismiss
   @State private var label = ""
-  @State private var color = ListEditor.colors[0]
+  @State private var color = ""
   @State private var error: String?
   @State private var confirmingDelete = false
-
-  /// The web app's palette.
-  static let colors = ["#9b84d6", "#c49651", "#6395c3", "#849c74", "#cd7f86", "#849299"]
 
   private var existing: Snapshot.List? {
     if case .edit(let list) = editing { list } else { nil }
@@ -107,8 +101,7 @@ struct ListEditor: View {
 
   var body: some View {
     let name = label.trimmingCharacters(in: .whitespacesAndNewlines)
-    // A list colored elsewhere keeps its color as a choice.
-    let palette = Self.colors.contains(color.lowercased()) ? Self.colors : Self.colors + [color]
+    let palette = existing?.palette ?? model.snapshot.palette
     VStack(alignment: .leading, spacing: 16) {
       VStack(alignment: .leading, spacing: 4) {
         Text(existing == nil ? "A home for something." : "Make it yours.").font(.title2.weight(.semibold))
@@ -160,6 +153,8 @@ struct ListEditor: View {
       if let existing {
         label = existing.label
         color = existing.color.lowercased()
+      } else {
+        color = model.snapshot.palette.first ?? ""
       }
     }
     .onChange(of: label) {
@@ -195,7 +190,6 @@ struct ListEditor: View {
   }
 }
 
-/// Moves dumps to a day picked on a calendar, or takes their day away.
 struct PickDay: View {
   let model: AppModel
   let ids: [String]
@@ -225,10 +219,12 @@ struct PickDay: View {
         Spacer()
         Button("Cancel") { dismiss() }
           .keyboardShortcut(.cancelAction)
-        Button("Move to \(Due.label(Due.key(day)))") {
-          model.setDue(ids, Due.key(day))
+        let picked = try? model.engine.day(at: day)
+        Button("Move to \(picked?.label ?? "This Day")") {
+          if let picked { model.setDue(ids, picked.due) }
           dismiss()
         }
+        .disabled(picked == nil)
         .keyboardShortcut(.defaultAction)
       }
     }

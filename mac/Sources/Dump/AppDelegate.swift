@@ -30,7 +30,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     start()
   }
 
-  /// Wires up the panel, hotkey and menu bar item around the model.
   private func start() {
     panel = CapturePanelController(model: model)
     panel.openSettings = { [weak self] in self?.showSettings() }
@@ -51,7 +50,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     watchSystem()
     Task {
       await model.start()
-      if model.firstRun || !registered { showSettings() }
+      if model.snapshot.firstRun || !registered { showSettings() }
     }
   }
 
@@ -202,12 +201,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
   func menuNeedsUpdate(_ menu: NSMenu) {
     let snapshot = model.snapshot
     captureItem.title = "Dump Something…  \(model.shortcut.display)"
-    let place = model.server.map { " · \($0.host)" } ?? ""
+    let place = snapshot.server.map { " · \($0.host)" } ?? ""
     statusLine.title = snapshot.sync.label + (snapshot.sync == .synced ? place : "")
     statusLine.image = dot(snapshot.sync.tint)
-    inboxLine.title = snapshot.inbox == 1 ? "1 dump in the inbox" : "\(snapshot.inbox) dumps in the inbox"
-    inboxLine.isHidden = snapshot.inbox == 0
-    syncItem.isHidden = model.server == nil
+    let inbox = snapshot.unfiled.count
+    inboxLine.title = inbox == 1 ? "1 dump in the inbox" : "\(inbox) dumps in the inbox"
+    inboxLine.isHidden = inbox == 0
+    syncItem.isHidden = snapshot.server == nil
     syncItem.isEnabled = snapshot.sync != .synced && snapshot.sync != .syncing
   }
 

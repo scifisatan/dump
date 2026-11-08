@@ -1,191 +1,262 @@
-// The notebook engine the Mac app runs in JavaScriptCore: the web app's own client core (capture,
-// filing, TinyBase sync) behind a small API the Swift host calls as `DumpEngine`. Polyfills load
-// first, before TinyBase and Zod initialize.
+// Polyfills load first, before TinyBase and Zod initialize.
 import './polyfills';
-import { createDumpClient, type Snapshot } from '../../src/core/client';
+import type { Snapshot } from '../../src/core/client';
+import { checkServer, serverSchema } from '../../src/core/connection';
+import { profileRegistry } from '../../src/core/profiles';
+import { createSession, type Session } from '../../src/core/session';
 import {
-  explainConnectionError,
-  inspectServer,
-  profileSchema,
-  requestTicket,
-  serverUrl,
-} from '../../src/core/connection';
-import { agenda, parseDue } from '../../src/shared/due';
-import { listPrefix, listSchema, type Dump } from '../../src/shared/schema';
+  byDay,
+  DAY_EXAMPLES,
+  dayLabel,
+  dueLabel,
+  dumpsIn,
+  home,
+  linkHost,
+  needsAttention,
+  notebook,
+  search,
+  type Notebook,
+} from '../../src/core/views';
+import { dayChoices, dayKey, isOverdue, parseDue } from '../../src/shared/due';
+import {
+  LIST_COLORS,
+  listPrefix,
+  listSchema,
+  paletteFor,
+  prefixFor,
+  type Collection,
+  type Dump,
+} from '../../src/shared/schema';
 import { native } from './native';
-import { deviceEvents, macPlatform } from './platform';
+import { device, macPlatform } from './platform';
+import { origin, setting } from './settings';
 
-type Client = ReturnType<typeof createDumpClient>;
-let client: Client | undefined;
+const RECENT = 5;
+
+const registry = profileRegistry(setting('connections'));
+const session = createSession({
+  registry,
+  platform: macPlatform,
+  saveKey: (profileId, key, server) => native.saveOwnerKey(profileId, key, server.baseUrl),
+});
+
+let open: Session | undefined;
 let unsubscribe = () => {};
+function follow() {
+  const current = session.get();
+  if (current === open) return;
+  unsubscribe();
+  open = current;
+  unsubscribe = current.client.subscribe(() => native.changed());
+  native.changed();
+}
+session.subscribe(follow);
 
-const RECENT = 6;
+function client() {
+  if (!open) throw new Error('No notebook is open.');
+  return open.client;
+}
 
-// One dump as the Mac app shows it.
-function item(dump: Dump, snapshot: Snapshot) {
+const item = (dump: Dump, book: Notebook, now: number) => ({
+  id: dump.id,
+  text: dump.text,
+  list: dump.list,
+  tags: dump.tags,
+  done: dump.done,
+  url: dump.url,
+  due: dump.due,
+  dueLabel: dump.due ? dueLabel(dump.due, now) : null,
+  site: dump.url ? linkHost(dump.url) : null,
+  overdue: isOverdue(dump, now),
+  createdAt: dump.created_at,
+  sorting: book.sorting.has(dump.id),
+});
+
+const ids = (dumps: Dump[]) => dumps.map((dump) => dump.id);
+
+type Section = {
+  id: string;
+  title: string;
+  overdue: boolean;
+  today: boolean;
+  quiet: boolean;
+  ids: string[];
+};
+const section = (id: string, title: string, dumps: Dump[] = []): Section => ({
+  id,
+  title,
+  overdue: false,
+  today: false,
+  quiet: false,
+  ids: ids(dumps),
+});
+const days = (dumps: Dump[], now: number) =>
+  byDay(dumps).map(({ day, dumps }) => section(`day-${day}`, dayLabel(day, now), dumps));
+const oldestFirst = (dumps: Dump[]) => [...dumps].reverse();
+
+function places(book: Notebook, now: number) {
+  const plan = home(book, now);
   return {
-    id: dump.id,
-    text: dump.text,
-    list: dump.list,
-    tags: dump.tags,
-    done: dump.done,
-    url: dump.url,
-    due: dump.due,
-    createdAt: dump.created_at,
-    sorting: snapshot.sorting.has(dump.id),
+    summary: plan.heading,
+    home: [
+      ...days(plan.earlier, now),
+      { ...section('today', plan.heading), today: true, quiet: plan.quiet },
+      ...plan.sections.map((part) => ({
+        ...section(part.key, part.label, part.dumps),
+        overdue: part.overdue,
+      })),
+    ],
+    done: days(oldestFirst(book.done), now),
+    lists: Object.fromEntries(
+      book.lists.map((list) => [
+        list.id,
+        days(oldestFirst(dumpsIn({ kind: 'list', id: list.id }, book)), now),
+      ]),
+    ),
   };
 }
 
-// What the panel and menu show: a compact view of the snapshot. `full` adds every dump and how
-// home groups them (src/shared/due.ts `agenda`), for the notebook window, which is not worth
-// encoding on each change while the window is closed.
 function view(snapshot: Snapshot, full: boolean) {
-  const active = snapshot.dumps.filter((dump) => !dump.deleted);
-  const ids = (dumps: Dump[]) => dumps.map((dump) => dump.id);
-  const plan = agenda(full ? active.filter((dump) => !dump.done) : [], Date.now());
+  const now = Date.now();
+  const book = notebook(snapshot);
   return {
     ready: snapshot.ready,
     sync: snapshot.sync,
     syncError: snapshot.syncError,
     saving: snapshot.saving,
     storageError: snapshot.storageError,
-    lists: snapshot.lists
-      .filter((list) => !list.deleted)
-      .map(({ id, label, color }) => ({ id, label, color })),
-    recent: active.slice(0, RECENT).map((dump) => item(dump, snapshot)),
-    dumps: full ? active.map((dump) => item(dump, snapshot)) : [],
-    home: {
-      earlier: ids(plan.earlier),
-      overdue: ids(plan.overdue),
-      due: ids(plan.due),
-      upcoming: ids(plan.upcoming),
-      dumped: ids(plan.dumped),
-    },
-    inbox: active.filter((dump) => !dump.done && !dump.list).length,
+    attention: needsAttention(snapshot),
+    profile: open?.profile ?? null,
+    others: registry.others(),
+    firstRun: open?.firstRun ?? false,
+    openError: open?.openError ?? null,
+    lists: book.lists.map(listView),
+    webApp: webApp(),
+    palette: LIST_COLORS,
+    examples: DAY_EXAMPLES,
+    days: dayChoices(now),
+    recent: book.dumps.slice(0, RECENT).map((dump) => item(dump, book, now)),
+    unfiled: ids(book.unfiled),
+    doneCount: book.done.length,
+    dumps: full ? book.dumps.map((dump) => item(dump, book, now)) : [],
+    places: full ? places(book, now) : null,
   };
 }
 
-function current() {
-  if (!client) throw new Error('No notebook is open.');
-  return client;
-}
+const listView = (list: Collection) => ({
+  id: list.id,
+  label: list.label,
+  color: list.color,
+  prefix: prefixFor(list),
+  palette: paletteFor(list.color),
+});
+
+const webApp = () => ({
+  chosen: origin.chosen(),
+  standard: origin.standard(open?.profile.server?.baseUrl),
+});
+
+const day = (due: string) => ({ due, label: dueLabel(due, Date.now()) });
 
 const engine = {
-  // Opens one notebook (a profile from the host's registry), closing any other first.
-  async open(config: string) {
-    const profile = profileSchema.parse(JSON.parse(config));
-    await engine.close();
-    const next = createDumpClient(macPlatform(profile));
-    client = next;
-    unsubscribe = next.subscribe(() => native.changed());
-    await next.start();
-    native.changed();
+  async launch() {
+    follow();
+    await open?.ready;
   },
 
-  // Flushes and closes the open notebook. A failed save throws and leaves it open and usable.
   async close() {
-    if (!client) return;
-    await client.stop();
-    unsubscribe();
-    client = undefined;
+    await open?.client.stop();
   },
 
   snapshot(full: boolean) {
-    return JSON.stringify(client ? view(client.getSnapshot(), full) : null);
+    return JSON.stringify(open ? view(open.client.getSnapshot(), full) : null);
   },
 
-  // The list an explicit `!list` prefix in this draft files to, if any.
+  search(query: string) {
+    const snapshot = client().getSnapshot();
+    return JSON.stringify(days(search(query, notebook(snapshot)), Date.now()));
+  },
+
   listFor(text: string) {
-    return client ? (listPrefix(text, client.getSnapshot().lists)?.list ?? null) : null;
+    return open ? (listPrefix(text, open.client.getSnapshot().lists)?.list ?? null) : null;
   },
 
-  // The day this draft names (YYYY-MM-DD), if any, for the composer to show before it is saved.
   dueFor(text: string) {
-    return parseDue(text, Date.now());
+    const due = parseDue(text, Date.now());
+    return JSON.stringify(due ? day(due) : null);
   },
 
-  // Captures synchronously, like the web composer. `list` files it when the text has no prefix
-  // of its own; otherwise Jev sorts it afterwards when the server has it. `due` is the day the
-  // composer showed, or null for none.
+  dayAt(time: number) {
+    return JSON.stringify(day(dayKey(time)));
+  },
+
   capture(text: string, list: string | null, due: string | null) {
-    const dump = current().capture(text, list, due);
+    const dump = client().capture(text, list, due);
     return JSON.stringify({ id: dump.id, list: dump.list, due: dump.due });
   },
 
-  // The core's dump actions (src/core/client.ts). All are final; there is no undo.
   setDone(id: string, done: boolean) {
-    current().setDone(id, done);
+    client().setDone(id, done);
   },
 
-  // Moves a dump to another day (YYYY-MM-DD), or takes its day away (null).
   setDue(id: string, due: string | null) {
-    current().setDue(id, due);
+    client().setDue(id, due);
   },
 
   file(id: string, list: string | null) {
-    current().file(id, list);
+    client().file(id, list);
   },
 
   remove(id: string) {
-    current().remove(id);
+    client().remove(id);
   },
 
-  // Creates a list, or renames and recolors one when `id` is given.
   saveList(label: string, color: string, id: string | null) {
-    const list = current().saveList(label, color, id ?? undefined);
-    return JSON.stringify({ id: list.id, label: list.label, color: list.color });
+    return JSON.stringify(listView(client().saveList(label, color, id ?? undefined)));
   },
 
-  // Tombstones the list; its dumps return to the inbox for Jev or the owner to sort again.
   deleteList(id: string) {
-    current().deleteList(listSchema.parse(id));
+    client().deleteList(listSchema.parse(id));
   },
 
   clearDone() {
-    return current().clearDone();
-  },
-
-  reconnect() {
-    current().reconnect();
+    return client().clearDone();
   },
 
   network(online: boolean) {
-    deviceEvents.network(online);
+    device.network(online);
   },
 
   resume() {
-    deviceEvents.resume();
+    device.resume();
   },
 
   suspend() {
-    deviceEvents.suspend();
+    device.suspend();
   },
 
-  // Settings: find a Dump server at an address, then check an owner key against it. Nothing is
-  // saved by either.
-  async inspect(address: string) {
-    try {
-      const baseUrl = serverUrl(address);
-      const info = await inspectServer(baseUrl);
-      return JSON.stringify({
-        baseUrl,
-        instanceId: info.instanceId,
-        auth: info.auth,
-        classify: info.classify,
-      });
-    } catch (cause) {
-      throw new Error(explainConnectionError(cause, 'Could not check this server.'), { cause });
-    }
+  async check(address: string) {
+    return JSON.stringify(await checkServer(address));
   },
 
-  async verify(baseUrl: string, key: string) {
-    try {
-      await requestTicket(baseUrl, key);
-    } catch (cause) {
-      throw new Error(explainConnectionError(cause, 'Could not connect to this server.'), {
-        cause,
-      });
-    }
+  async connect(server: string, key: string) {
+    await session.connect(serverSchema.parse(JSON.parse(server)), key);
+  },
+
+  async signIn(key: string) {
+    await session.signIn(key);
+  },
+
+  async switchTo(profileId: string) {
+    const profile = registry.others().find((item) => item.id === profileId);
+    if (!profile) throw new Error('That notebook is no longer saved on this Mac.');
+    await session.switchTo(profile);
+  },
+
+  chooseWebApp(input: string) {
+    const chosen = origin.choose(input);
+    native.changed();
+    return chosen;
   },
 };
 

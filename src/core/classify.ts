@@ -10,7 +10,6 @@ import { ownerKeyHeaders, serverUrl, Unauthorized } from './connection';
 
 export class ClassifyUnavailable extends Error {}
 
-// What Jev would be asked about a dump, or null when there is nothing to judge (a bare link).
 export function classifyRequest(text: string, lists: Collection[]): ClassifyRequest | null {
   if (!text.replace(/https?:\/\/\S+/gi, '').trim()) return null;
   const parsed = classifyRequestSchema.safeParse({
@@ -20,8 +19,6 @@ export function classifyRequest(text: string, lists: Collection[]): ClassifyRequ
   return parsed.success ? parsed.data : null;
 }
 
-// Jev's list, or null when it is unsure. Throws on network or server failure so the caller
-// can retry later; ClassifyUnavailable means this deployment has classification turned off.
 export async function requestList(
   baseUrl: string,
   key: string,

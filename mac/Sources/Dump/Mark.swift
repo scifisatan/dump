@@ -20,7 +20,6 @@ struct DumpMark: View {
 }
 
 enum Mark {
-  /// Three strokes through the center: vertical, and ±30° from horizontal.
   static func asterisk(center: CGPoint, radius: CGFloat) -> Path {
     var path = Path()
     for degrees in [90.0, 30.0, -30.0] {

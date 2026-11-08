@@ -1,24 +1,22 @@
 import { useState } from 'react';
 import { StyleSheet, Text, TextInput, View } from 'react-native';
-import { dayKey, parseDue } from '../../../src/shared/due';
+import { dueLabel, notebook } from '../../../src/core/views';
+import { dayChoices, parseDue } from '../../../src/shared/due';
 import type { ScreenProps } from '../App';
 import { failed } from '../DumpRow';
 import { useSession, useSnapshot } from '../notebook';
 import { useColors } from '../theme';
 import { Button } from '../ui';
-import { dueLabel, notebook } from '../views';
 
-// Moves a dump to another day. A day is typed the way it would be in a dump ("friday",
-// "oct 24", "in 3 days") and read by the same parser; Today and Tomorrow are one tap.
 export function PickDay({ navigation, route }: ScreenProps<'PickDay'>) {
   const { client } = useSession();
   const book = notebook(useSnapshot());
   const colors = useColors();
   const dump = book.dumps.find((item) => item.id === route.params.id);
   const [text, setText] = useState('');
-  const typed = text.trim() ? parseDue(text, Date.now()) : null;
-  const now = new Date();
-  const tomorrow = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1);
+  const now = Date.now();
+  const typed = text.trim() ? parseDue(text, now) : null;
+  const { today, tomorrow } = dayChoices(now);
 
   const set = (due: string | null) => {
     try {
@@ -35,14 +33,14 @@ export function PickDay({ navigation, route }: ScreenProps<'PickDay'>) {
         <Text style={[styles.title, { color: colors.foreground }]}>Pick a day.</Text>
         {dump ? (
           <Text style={[styles.subtitle, { color: colors.muted }]} numberOfLines={2}>
-            {dump.due ? `${dueLabel(dump.due)} · ` : ''}
+            {dump.due ? `${dueLabel(dump.due, now)} · ` : ''}
             {dump.text}
           </Text>
         ) : null}
       </View>
       <View style={styles.quick}>
-        <Button title="Today" onPress={() => set(dayKey(now))} />
-        <Button title="Tomorrow" onPress={() => set(dayKey(tomorrow))} />
+        <Button title="Today" onPress={() => set(today)} />
+        <Button title="Tomorrow" onPress={() => set(tomorrow)} />
       </View>
       <TextInput
         value={text}
@@ -68,11 +66,11 @@ export function PickDay({ navigation, route }: ScreenProps<'PickDay'>) {
         {!text.trim()
           ? 'Type a day the way you would in a dump.'
           : typed
-            ? dueLabel(typed)
+            ? dueLabel(typed, now)
             : 'That isn’t a day Dump knows. Try “friday” or “oct 24”.'}
       </Text>
       <Button
-        title={typed ? `Move to ${dueLabel(typed)}` : 'Move'}
+        title={typed ? `Move to ${dueLabel(typed, now)}` : 'Move'}
         kind="prominent"
         onPress={() => typed && set(typed)}
         disabled={!typed}

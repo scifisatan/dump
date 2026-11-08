@@ -1,7 +1,6 @@
 import AppKit
 import Carbon.HIToolbox
 
-/// A global keyboard shortcut. Stored as a key code plus modifiers, with the key's name for display.
 struct Shortcut: Codable, Equatable {
   var keyCode: UInt32
   var modifiers: UInt
@@ -89,7 +88,6 @@ final class HotKey {
     if let handler { RemoveEventHandler(handler) }
   }
 
-  /// False when the system refused the combination.
   @discardableResult
   func register(_ shortcut: Shortcut) -> Bool {
     unregister()

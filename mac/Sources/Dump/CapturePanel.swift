@@ -94,7 +94,6 @@ final class CapturePanelController {
     if panel.isVisible { hide() } else { show() }
   }
 
-  /// Opens on the screen with the pointer, a little above center, like Spotlight.
   func show() {
     let screen = NSScreen.screens.first { NSMouseInRect(NSEvent.mouseLocation, $0.frame, false) } ?? NSScreen.main
     guard let frame = screen?.visibleFrame else { return }
@@ -123,12 +122,8 @@ final class CapturePanelController {
     hide()
     let snapshot = model.snapshot
     let list = snapshot.list(captured.list)
-    let later: Bool = switch snapshot.sync {
-    case .offline, .error, .signedOut: true
-    default: false
-    }
     hud.show(
-      "Saved to \(list?.label ?? "Inbox")\(later ? " · syncs later" : "")",
+      "Saved to \(list?.label ?? "Inbox")\(snapshot.storageError == nil && snapshot.attention ? " · syncs later" : "")",
       color: list.map { Color(hex: $0.color) })
   }
 
@@ -138,7 +133,6 @@ final class CapturePanelController {
     if panel.isVisible { place() }
   }
 
-  /// Keeps the top edge fixed while the panel grows or shrinks with its content.
   private func place() {
     guard let top else { return }
     panel.setFrame(
@@ -152,7 +146,6 @@ final class CapturePanelController {
   }
 }
 
-/// A short confirmation near the bottom of the screen after a capture.
 @MainActor
 final class HUD {
   private let panel: NSPanel

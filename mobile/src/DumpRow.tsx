@@ -9,30 +9,26 @@ import ReanimatedSwipeable, {
   SwipeDirection,
   type SwipeableMethods,
 } from 'react-native-gesture-handler/ReanimatedSwipeable';
-import { dayKey } from '../../src/shared/due';
+import {
+  dueLabel,
+  linkHost,
+  placeOf,
+  timeLabel,
+  type Notebook,
+  type Place,
+} from '../../src/core/views';
+import { dayChoices, isOverdue } from '../../src/shared/due';
 import type { Dump } from '../../src/shared/schema';
 import type { Screens } from './App';
 import { useSession } from './notebook';
 import { useColors } from './theme';
 import { Menu, type MenuItem } from './menu';
 import { Icon, icons, ListDot, type IconName } from './ui';
-import {
-  dueLabel,
-  host,
-  overdue,
-  placeOf,
-  placeTitle,
-  timeLabel,
-  type Notebook,
-  type Place,
-} from './views';
+import { placeTitle } from './views';
 
 export const failed = (error: unknown) =>
   Alert.alert('That didn’t work', error instanceof Error ? error.message : String(error));
 
-// One dump. The circle marks it done; a long press opens every action. Swiping right marks it
-// done, and swiping left offers Remove, which needs a tap because there is no undo. Its day opens
-// Pick a Day, and its list's name opens that list.
 export function DumpRow({
   dump,
   book,
@@ -42,10 +38,8 @@ export function DumpRow({
 }: {
   dump: Dump;
   book: Notebook;
-  // Where dumps of several lists mix, each shows its own.
   showList: boolean;
   highlighted?: boolean;
-  // In search results: leaves the search for the dump's own view.
   reveal?: (place: Place) => void;
 }) {
   const { client } = useSession();
@@ -54,10 +48,9 @@ export function DumpRow({
   const swipe = useRef<SwipeableMethods>(null);
   const list = showList ? book.list(dump.list) : undefined;
   const sorting = book.sorting.has(dump.id);
-  const late = overdue(dump);
-  const now = new Date();
-  const today = dayKey(now);
-  const tomorrow = dayKey(new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1));
+  const now = Date.now();
+  const late = isOverdue(dump, now);
+  const { today, tomorrow } = dayChoices(now);
   const pickDay = () => navigation.navigate('PickDay', { id: dump.id });
 
   const act = (work: () => void) => {
@@ -201,7 +194,7 @@ export function DumpRow({
                   <Pressable
                     onPress={pickDay}
                     accessibilityRole="button"
-                    accessibilityLabel={`${late ? 'Overdue' : 'Due'} ${dueLabel(dump.due)}: change date`}
+                    accessibilityLabel={`${late ? 'Overdue' : 'Due'} ${dueLabel(dump.due, now)}: change date`}
                     hitSlop={6}
                     style={[styles.link, { backgroundColor: colors.fill }]}
                   >
@@ -213,7 +206,7 @@ export function DumpRow({
                     <Text
                       style={[styles.metaText, { color: late ? colors.destructive : colors.muted }]}
                     >
-                      {dueLabel(dump.due)}
+                      {dueLabel(dump.due, now)}
                     </Text>
                   </Pressable>
                 ) : null}
@@ -242,12 +235,12 @@ export function DumpRow({
                   <Pressable
                     onPress={openLink}
                     accessibilityRole="link"
-                    accessibilityLabel={`Open ${host(dump.url)}`}
+                    accessibilityLabel={`Open ${linkHost(dump.url)}`}
                     hitSlop={6}
                     style={[styles.link, { backgroundColor: colors.fill }]}
                   >
                     <Text style={[styles.metaText, { color: colors.muted }]} numberOfLines={1}>
-                      {host(dump.url)}
+                      {linkHost(dump.url)}
                     </Text>
                     <Icon name={icons.link} size={10} color={colors.muted} />
                   </Pressable>
@@ -255,7 +248,9 @@ export function DumpRow({
               </View>
             ) : null}
           </View>
-          <Text style={[styles.time, { color: colors.faint }]}>{timeLabel(dump.created_at)}</Text>
+          <Text style={[styles.time, { color: colors.faint }]}>
+            {timeLabel(dump.created_at, now)}
+          </Text>
         </View>
       </Menu>
     </ReanimatedSwipeable>

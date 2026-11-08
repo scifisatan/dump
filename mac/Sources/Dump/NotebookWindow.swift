@@ -2,15 +2,12 @@ import AppKit
 import DumpKit
 import SwiftUI
 
-/// A view of the notebook, as in the web app: home (every open dump, ending in Today), one list,
-/// or Done.
 enum Place: Hashable {
   case home
   case list(String)
   case done
 }
 
-/// The list editor's subject: a new list, or one to rename, recolor or delete.
 enum ListEditing: Identifiable {
   case new
   case edit(Snapshot.List)
@@ -23,41 +20,34 @@ enum ListEditing: Identifiable {
   }
 }
 
-/// Dumps whose day is being picked on a calendar.
 struct DayPicking: Identifiable {
   let ids: [String]
   var id: String { ids.joined(separator: " ") }
 }
 
-/// What the notebook window shows, apart from the notebook itself.
 @MainActor @Observable
 final class NotebookState {
   var place = Place.home
   var query = ""
-  /// The composer's text; an empty Today's examples fill it.
   var draft = ""
   var editing: ListEditing?
   var sortingInbox = false
   var pickingDay: DayPicking?
-  /// A dump to select and scroll to when its view opens, after "Show in Home" from a search.
   var reveal: String?
 }
 
-/// The notebook window: browse, search, sort and edit everything captured, as on the web.
 @MainActor
 final class NotebookWindowController: NSObject, NSWindowDelegate {
   private let model: AppModel
   private let state = NotebookState()
   private var window: NSWindow?
   var openSettings: () -> Void = {}
-  /// Called after the window opens or closes; the app shows in the Dock only while it is open.
   var visibilityChanged: () -> Void = {}
 
   init(model: AppModel) {
     self.model = model
   }
 
-  /// Open, even if minimized to the Dock.
   var isOpen: Bool { window.map { $0.isVisible || $0.isMiniaturized } ?? false }
 
   func show(_ place: Place? = nil) {

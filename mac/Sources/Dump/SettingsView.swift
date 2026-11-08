@@ -7,7 +7,7 @@ struct SettingsView: View {
 
   var body: some View {
     Form {
-      if model.firstRun {
+      if model.snapshot.firstRun {
         Section { Welcome(model: model) }
       }
       Section("Quick capture") {
@@ -95,6 +95,7 @@ private struct ShortcutRecorder: View {
 
 private struct SyncSettings: View {
   let model: AppModel
+  @State private var switchError: String?
 
   var body: some View {
     let snapshot = model.snapshot
@@ -107,7 +108,7 @@ private struct SyncSettings: View {
     if let error = snapshot.syncError, snapshot.sync != .synced {
       Text(error).font(.callout).foregroundStyle(.secondary)
     }
-    if let server = model.server {
+    if let server = snapshot.server {
       LabeledContent("Server") {
         Text(server.baseUrl).textSelection(.enabled)
       }
@@ -129,21 +130,26 @@ private struct SyncSettings: View {
         model: model, action: "Connect and Sync",
         notice: "Your notes on this Mac will be added to this server’s notebook.")
     }
-    let others = model.profiles.others
-    if !others.isEmpty {
-      ForEach(others) { profile in
-        LabeledContent(profile.server?.host ?? "This Mac only") {
-          Button("Open") {
-            Task { try? await model.switchTo(profile) }
+    ForEach(snapshot.others) { profile in
+      LabeledContent(profile.server?.host ?? "This Mac only") {
+        Button("Open") {
+          Task {
+            do {
+              try await model.switchTo(profile)
+              switchError = nil
+            } catch {
+              switchError = error.localizedDescription
+            }
           }
         }
       }
     }
+    if let switchError {
+      Text(switchError).font(.callout).foregroundStyle(.red)
+    }
   }
 }
 
-/// Finds a Dump server, then checks its owner key before anything is saved; the web app's
-/// ServerConnection, natively.
 private struct ServerConnection: View {
   let model: AppModel
   let action: String
@@ -213,7 +219,7 @@ private struct ServerConnection: View {
     Task {
       defer { busy = false }
       do {
-        checked = try await model.engine.inspect(address)
+        checked = try await model.engine.check(address)
       } catch {
         self.error = error.localizedDescription
       }
@@ -238,7 +244,6 @@ private struct ServerConnection: View {
   }
 }
 
-/// Shown when the server refused this Mac's key, because it is wrong or was rotated.
 private struct SignIn: View {
   let model: AppModel
   @State private var key = ""
@@ -266,7 +271,7 @@ private struct SignIn: View {
     Task {
       defer { busy = false }
       do {
-        try await model.signIn(key: key)
+        try await model.engine.signIn(key: key)
         key = ""
       } catch {
         self.error = error.localizedDescription
@@ -278,11 +283,10 @@ private struct SignIn: View {
 private struct AdvancedSettings: View {
   let model: AppModel
   @State private var origin = ""
-  @State private var invalid = false
+  @State private var error: String?
 
   var body: some View {
-    let standard = model.server.flatMap { URL(string: $0.baseUrl) }.map(ClientOrigin.standard(for:))
-      ?? ClientOrigin.hosted
+    let standard = model.snapshot.webApp.standard
     LabeledContent("Web app address") {
       TextField("Web app address", text: $origin, prompt: Text(standard))
         .labelsHidden()
@@ -292,28 +296,25 @@ private struct AdvancedSettings: View {
         .frame(maxWidth: 330)
     }
     Text(
-      "Servers answer only the web app addresses listed in their ALLOWED_CLIENT_ORIGINS, and this Mac introduces itself as one. Leave it empty to use the hosted app (or the dev client for a localhost server). Press Return to apply."
+      error
+        ?? "Servers answer only the web app addresses listed in their ALLOWED_CLIENT_ORIGINS, and this Mac introduces itself as one. Leave it empty to use the hosted app (or the dev client for a localhost server). Press Return to apply."
     )
     .font(.callout)
-    .foregroundStyle(invalid ? .red : .secondary)
-    .onAppear { origin = model.webAppOrigin ?? "" }
+    .foregroundStyle(error == nil ? Color.secondary : Color.red)
+    .onAppear { origin = model.snapshot.webApp.chosen ?? "" }
     Button("Show Notebook Files in Finder") {
       NSWorkspace.shared.activateFileViewerSelecting([AppModel.dataDirectory])
     }
   }
 
   private func apply() {
-    let trimmed = origin.trimmingCharacters(in: .whitespaces)
-    if trimmed.isEmpty {
-      model.webAppOrigin = nil
-    } else if let normalized = ClientOrigin.normalized(trimmed) {
-      model.webAppOrigin = normalized
-      origin = normalized
-    } else {
-      invalid = true
+    do {
+      origin = try model.engine.chooseWebApp(origin) ?? ""
+    } catch {
+      self.error = error.localizedDescription
       return
     }
-    invalid = false
+    error = nil
     model.engine.resume()
   }
 }

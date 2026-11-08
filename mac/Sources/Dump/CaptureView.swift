@@ -2,7 +2,6 @@ import AppKit
 import DumpKit
 import SwiftUI
 
-/// The capture panel: a text box, the list it will be filed to, the latest dumps, and sync state.
 struct CaptureView: View {
   @Bindable var model: AppModel
   var onSubmit: () -> Void
@@ -37,15 +36,15 @@ struct CaptureView: View {
 
       HStack(spacing: 10) {
         ListChips(model: model)
-        // The day the draft names, which the dump gets.
         if let due = model.draftDue {
-          DueBadge(due: due).font(.system(size: 12)).fixedSize()
+          DueBadge(label: due.label).font(.system(size: 12)).fixedSize()
         }
       }
       .padding(.horizontal, 20)
       .padding(.bottom, 14)
 
-      if let problem = model.captureError ?? model.snapshot.storageError ?? model.openError {
+      if let problem = model.captureError ?? model.snapshot.storageError ?? model.snapshot.openError
+        ?? model.engineError {
         Label(problem, systemImage: "exclamationmark.triangle.fill")
           .font(.callout)
           .foregroundStyle(.red)
@@ -55,7 +54,7 @@ struct CaptureView: View {
 
       if !model.snapshot.recent.isEmpty {
         Divider().opacity(0.6)
-        Recent(items: Array(model.snapshot.recent.prefix(5)), snapshot: model.snapshot, onNotebook: onNotebook)
+        Recent(snapshot: model.snapshot, onNotebook: onNotebook)
       }
 
       Divider().opacity(0.6)
@@ -135,7 +134,6 @@ private struct Chip: View {
 }
 
 private struct Recent: View {
-  let items: [Snapshot.Item]
   let snapshot: Snapshot
   let onNotebook: () -> Void
 
@@ -164,7 +162,7 @@ private struct Recent: View {
       }
       .padding(.horizontal, 20)
       .padding(.bottom, 4)
-      ForEach(items) { item in
+      ForEach(snapshot.recent) { item in
         let list = snapshot.list(item.list)
         HStack(spacing: 10) {
           Circle()
@@ -217,7 +215,7 @@ private struct Footer: View {
         .contentShape(Rectangle())
       }
       .buttonStyle(.plain)
-      .help(model.snapshot.syncError ?? model.server?.baseUrl ?? "Open Settings to connect your server")
+      .help(model.snapshot.syncError ?? model.snapshot.server?.baseUrl ?? "Open Settings to connect your server")
       Spacer()
       KeyHint(keys: "↩", action: "Save")
       KeyHint(keys: "⇧↩", action: "New line")

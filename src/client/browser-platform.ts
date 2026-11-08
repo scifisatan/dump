@@ -41,17 +41,19 @@ export function browserPlatform(profile: ServerProfile): ClientPlatform {
         document.removeEventListener('visibilitychange', visible);
       };
     },
-    tabs(store) {
-      if (typeof BroadcastChannel === 'undefined') return { async start() {}, async destroy() {} };
-      const tabs = createBroadcastChannelSynchronizer(store, channelName(profile));
-      return {
-        async start() {
-          await tabs.startSync();
-        },
-        async destroy() {
-          await tabs.destroy();
-        },
-      };
-    },
+    tabs:
+      typeof BroadcastChannel === 'undefined'
+        ? undefined
+        : (store) => {
+            const tabs = createBroadcastChannelSynchronizer(store, channelName(profile));
+            return {
+              async start() {
+                await tabs.startSync();
+              },
+              async destroy() {
+                await tabs.destroy();
+              },
+            };
+          },
   };
 }

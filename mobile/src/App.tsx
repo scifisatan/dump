@@ -17,10 +17,9 @@ import { Search } from './screens/Search';
 import { Settings } from './screens/Settings';
 import { SortInbox } from './screens/SortInbox';
 import { navigationTheme, useColors } from './theme';
-import type { Place } from './views';
+import type { Place } from '../../src/core/views';
 
 export type Screens = {
-  // `reveal` scrolls to and highlights a dump, after a search.
   Notebook: { place: Place; reveal?: string };
   Search: undefined;
   ListEditor: { id?: string };
@@ -32,7 +31,6 @@ export type ScreenProps<Name extends keyof Screens> = NativeStackScreenProps<Scr
 
 const Stack = createNativeStackNavigator<Screens>();
 
-// The app opens on home, ready to capture. Lists and Done open from Search.
 const INITIAL: InitialState = {
   routes: [{ name: 'Notebook', params: { place: { kind: 'home' } } }],
 };
@@ -46,7 +44,6 @@ export function App() {
       <SafeAreaProvider>
         <KeyboardProvider>
           <StatusBar style="auto" />
-          {/* Opening another notebook starts the screens over, as a reload does on the web. */}
           <NavigationContainer
             key={session.id}
             theme={navigationTheme(colors, scheme)}
