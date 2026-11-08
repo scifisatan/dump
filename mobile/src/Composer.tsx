@@ -31,10 +31,16 @@ export function Composer({
   const { client } = useSession();
   const colors = useColors();
   const [draft, setDraft] = useState('');
+  // What the input holds now, which can be newer than this render's draft.
+  const latest = useRef('');
+  const type = (text: string) => {
+    latest.current = text;
+    setDraft(text);
+  };
   const input = useRef<TextInput>(null);
   useImperativeHandle(ref, () => ({
     fill(text) {
-      setDraft(text);
+      type(text);
       input.current?.focus();
     },
   }));
@@ -48,11 +54,16 @@ export function Composer({
   const due = read === skipped ? null : read;
   const blank = draft.trim().length === 0;
 
-  const submit = () => {
-    if (blank || !ready) return;
+  // iOS applies a pending autocorrection as the tap on the button ends, and that change reaches JS
+  // just after the press. The button saves a frame later, so the dump gets the corrected word and
+  // the day it names, and the composer clears after the correction instead of being refilled by it.
+  const save = () => {
+    const text = latest.current;
+    if (text.trim().length === 0 || !ready) return;
+    const day = parseDue(text, Date.now());
     try {
-      const dump = client.capture(draft, list, due);
-      setDraft('');
+      const dump = client.capture(text, list, day === skipped ? null : day);
+      type('');
       setSkipped(null);
       void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
       // Home shows every open dump, so only a list view can lose sight of a new one.
@@ -113,7 +124,7 @@ export function Composer({
           ref={input}
           value={draft}
           onChangeText={(text) => {
-            setDraft(text);
+            type(text);
             if (text) setNote(null);
           }}
           placeholder="What’s on your mind?"
@@ -124,7 +135,7 @@ export function Composer({
           style={[styles.input, { color: colors.foreground }]}
         />
         <Pressable
-          onPress={submit}
+          onPress={() => requestAnimationFrame(save)}
           disabled={blank || !ready}
           accessibilityRole="button"
           accessibilityLabel="Save"
