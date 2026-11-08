@@ -6,8 +6,6 @@ import { ListDot } from './components/ListDot';
 import { Button } from './components/ui/button';
 import { hasNotebook } from './registry';
 
-// Kept out of the landing page's own bundle, then fetched while a new visitor reads, so
-// Get started opens at once.
 const loadOnboarding = () => import('./components/Onboarding');
 const Onboarding = lazy(loadOnboarding);
 
@@ -32,7 +30,6 @@ const features = [
   },
 ];
 
-// New visitors start setup here; people with a notebook go straight back to it.
 function Start({
   returning,
   onStart,

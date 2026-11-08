@@ -1,11 +1,10 @@
 import { z } from 'zod';
-import { instanceIdSchema, pingSchema, syncTicketSchema } from '../shared/api';
+import { instanceIdSchema, pingSchema, syncTicketSchema, type PingResult } from '../shared/api';
+import { isLocalHost } from '../shared/hosts';
 
 export class ConnectionError extends Error {}
-// The server refused the owner key: it is wrong, missing, or was rotated.
 export class Unauthorized extends ConnectionError {}
 
-// A server lives at an origin. Reject paths and credentials rather than silently dropping them.
 export function serverUrl(input: string): string {
   let url: URL;
   try {
@@ -13,8 +12,7 @@ export function serverUrl(input: string): string {
   } catch {
     throw new ConnectionError('Enter a full server address, such as https://dump.example.com.');
   }
-  const local = ['localhost', '127.0.0.1', '[::1]'].includes(url.hostname);
-  if (url.protocol !== 'https:' && !(local && url.protocol === 'http:'))
+  if (url.protocol !== 'https:' && !(isLocalHost(url.hostname) && url.protocol === 'http:'))
     throw new ConnectionError('Use HTTPS, or HTTP on localhost for development.');
   if (url.username || url.password || url.pathname !== '/' || url.search || url.hash)
     throw new ConnectionError('Use the server address without a path, query, or credentials.');
@@ -26,14 +24,13 @@ export const serverSchema = z.object({
   instanceId: instanceIdSchema,
 });
 export type ServerLocation = z.infer<typeof serverSchema>;
-// One notebook: synced with a server, or (server: null) kept only on this device.
 export const profileSchema = z.object({
   id: z.uuid(),
   server: serverSchema.nullable(),
 });
 export type ServerProfile = z.infer<typeof profileSchema>;
 
-export function readServerInfo(value: unknown) {
+function readServerInfo(value: unknown) {
   const result = pingSchema.safeParse(value);
   if (!result.success)
     throw new ConnectionError(
@@ -45,7 +42,7 @@ export function readServerInfo(value: unknown) {
 // What the owner sees when a server cannot be checked or connected, on every client. A browser
 // cannot read a refused origin (the 403 carries no CORS headers), so it fails like an unreachable
 // server and that message names both causes.
-export function explainConnectionError(cause: unknown, fallback: string) {
+function explainConnectionError(cause: unknown, fallback: string) {
   if (cause instanceof TypeError)
     return 'Could not reach this server. Check the address, that it is online, and that its ALLOWED_CLIENT_ORIGINS lists this app.';
   return cause instanceof Error ? cause.message : fallback;
@@ -101,6 +98,31 @@ export function syncUrl(baseUrl: string, instanceId: string, ticket: string) {
   url.searchParams.set('instance', instanceId);
   url.searchParams.set('ticket', ticket);
   return url.href;
+}
+
+export type ServerCheck = ServerLocation & Pick<PingResult, 'auth' | 'classify'>;
+
+export async function checkServer(address: string, signal?: AbortSignal): Promise<ServerCheck> {
+  try {
+    const baseUrl = serverUrl(address);
+    const info = await inspectServer(baseUrl, signal);
+    signal?.throwIfAborted();
+    return { baseUrl, instanceId: info.instanceId, auth: info.auth, classify: info.classify };
+  } catch (cause) {
+    throw new ConnectionError(explainConnectionError(cause, 'Could not check this server.'), {
+      cause,
+    });
+  }
+}
+
+export async function verifyKey(baseUrl: string, key: string, signal?: AbortSignal) {
+  try {
+    await requestTicket(baseUrl, key, signal);
+  } catch (cause) {
+    throw new ConnectionError(explainConnectionError(cause, 'Could not connect to this server.'), {
+      cause,
+    });
+  }
 }
 
 export const databaseName = (profile: ServerProfile) => `dump-v1-${profile.id}`;

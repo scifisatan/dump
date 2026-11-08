@@ -4,19 +4,15 @@ import { Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 import Animated, { useAnimatedStyle } from 'react-native-reanimated';
 import { useReanimatedKeyboardAnimation } from 'react-native-keyboard-controller';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { dueLabel, type Notebook } from '../../src/core/views';
 import { parseDue } from '../../src/shared/due';
 import { listPrefix } from '../../src/shared/schema';
 import { useSession } from './notebook';
 import { useColors } from './theme';
 import { Icon, icons, ListDot } from './ui';
-import { dueLabel, type Notebook } from './views';
 
-// Lets a view put a suggestion in the composer, focused and ready to send.
 export type ComposerHandle = { fill(text: string): void };
 
-// Captures into the view's list (home leaves filing to `!list` or Jev). A `!list` prefix still
-// wins. The day read from the draft shows above it, and its × saves the dump without one. Return
-// adds a line; the button saves and keeps the keyboard up for the next one.
 export function Composer({
   book,
   list,
@@ -31,7 +27,6 @@ export function Composer({
   const { client } = useSession();
   const colors = useColors();
   const [draft, setDraft] = useState('');
-  // What the input holds now, which can be newer than this render's draft.
   const latest = useRef('');
   const type = (text: string) => {
     latest.current = text;
@@ -44,9 +39,7 @@ export function Composer({
       input.current?.focus();
     },
   }));
-  // Where the last dump went when that is not this view, or why it was not saved.
   const [note, setNote] = useState<{ text: string; error?: boolean } | null>(null);
-  // The day read from the draft that the owner chose not to use.
   const [skipped, setSkipped] = useState<string | null>(null);
   const prefix = listPrefix(draft, book.lists);
   const target = prefix ? book.list(prefix.list) : undefined;
@@ -66,10 +59,9 @@ export function Composer({
       type('');
       setSkipped(null);
       void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-      // Home shows every open dump, so only a list view can lose sight of a new one.
       setNote(
         list !== null && dump.list !== list
-          ? { text: `Saved to ${book.list(dump.list)?.label ?? 'Inbox'}` }
+          ? { text: `Saved to ${book.listLabel(dump.list)}` }
           : null,
       );
     } catch (error) {
@@ -103,9 +95,9 @@ export function Composer({
               <Icon name={icons.calendar} size={12} color={colors.muted} />
               <Text
                 style={[styles.captionText, { color: colors.muted }]}
-                accessibilityLabel={`Due ${dueLabel(due)}`}
+                accessibilityLabel={`Due ${dueLabel(due, Date.now())}`}
               >
-                {dueLabel(due)}
+                {dueLabel(due, Date.now())}
               </Text>
               <Pressable
                 onPress={() => setSkipped(due)}
@@ -149,8 +141,6 @@ export function Composer({
   );
 }
 
-// Space under the composer that follows the keyboard frame by frame, and the home indicator's
-// safe area while the keyboard is closed.
 export function KeyboardSpace() {
   const { bottom } = useSafeAreaInsets();
   const { height } = useReanimatedKeyboardAnimation();

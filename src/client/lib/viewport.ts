@@ -2,7 +2,6 @@ import { useEffect } from 'react';
 
 // Keyboards taller than this count as open; smaller differences are browser toolbars.
 const KEYBOARD_MIN_HEIGHT = 120;
-// Where the last measured keyboard height is remembered between visits.
 const KEYBOARD_HEIGHT_KEY = 'dump-keyboard-height';
 // After a predicted change, resync with the real viewport in case no keyboard moved.
 const SETTLE_MS = 600;

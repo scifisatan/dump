@@ -1,24 +1,12 @@
 import { useState, type FormEvent } from 'react';
 import { CalendarDays, Check, X } from 'lucide-react';
-import { addDays, differenceInCalendarDays, format, parseISO } from 'date-fns';
-import { dayKey } from '../../shared/due';
+import { dueLabel } from '../../core/views';
+import { dayChoices, dayKey } from '../../shared/due';
 import { Button } from './ui/button';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from './ui/dialog';
 import { DropdownMenuItem } from './ui/dropdown-menu';
 import { Input } from './ui/input';
 
-// A due day as it reads from today: Today, Tomorrow, a weekday within the week, else a date.
-export function dueLabel(due: string, now = new Date()) {
-  const day = parseISO(due);
-  const ahead = differenceInCalendarDays(day, now);
-  if (ahead === 0) return 'Today';
-  if (ahead === 1) return 'Tomorrow';
-  if (ahead === -1) return 'Yesterday';
-  if (ahead > 1 && ahead < 7) return format(day, 'EEEE');
-  return format(day, day.getFullYear() === now.getFullYear() ? 'EEE, MMM d' : 'MMM d, y');
-}
-
-// The quick choices for a dump's day. `pick` opens DuePicker for any other day.
 export function DueMenuItems({
   due,
   set,
@@ -28,8 +16,7 @@ export function DueMenuItems({
   set: (due: string | null) => void;
   pick: () => void;
 }) {
-  const today = dayKey(Date.now());
-  const tomorrow = dayKey(addDays(new Date(), 1));
+  const { today, tomorrow } = dayChoices(Date.now());
   return (
     <>
       <DropdownMenuItem onSelect={() => set(today)}>
@@ -92,13 +79,12 @@ export function DuePicker({
   );
 }
 
-// The day the composer read from the draft, before it is sent. `skip` sends it undated instead.
 export function DraftDue({ due, skip }: { due: string; skip: () => void }) {
   return (
     <span className="flex shrink-0 items-center gap-1 rounded-full bg-secondary py-0.5 pr-0.5 pl-2 text-[11px] text-secondary-foreground">
       <CalendarDays size={13} aria-hidden />
       <span className="sr-only">Due </span>
-      {dueLabel(due)}
+      {dueLabel(due, Date.now())}
       <button
         type="button"
         className="grid size-5 place-items-center rounded-full hover:bg-muted"

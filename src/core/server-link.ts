@@ -11,8 +11,6 @@ import {
   type ServerLocation,
 } from './connection';
 
-// One server, reached with the host's fetch and WebSocket (a browser, or the Mac app's shims).
-// `readKey` runs on every use, so a key entered again in Settings applies without reopening.
 export function createServerLink(server: ServerLocation, readKey: () => string | null): ServerLink {
   const key = () => {
     const value = readKey();

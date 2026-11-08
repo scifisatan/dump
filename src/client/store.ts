@@ -1,12 +1,18 @@
 import { useSyncExternalStore } from 'react';
-import { createDumpClient } from '../core/client';
+import { createSession } from '../core/session';
 import { browserPlatform } from './browser-platform';
-import { activeProfile } from './profiles';
+import { registry, reopen, saveKey } from './profiles';
 
-const profile = activeProfile();
-if (!profile) throw new Error('Set up a notebook before opening one.');
+if (!registry.active()) throw new Error('Set up a notebook before opening one.');
+export const session = createSession({
+  registry,
+  platform: browserPlatform,
+  saveKey,
+  reopen,
+});
+const { profile, client } = session.get();
+export { client };
 export const currentProfile = profile;
-export const client = createDumpClient(browserPlatform(profile));
 // A device-only notebook has no other copy, so ask the browser not to evict it. Safari
 // otherwise clears site data after seven days without a visit unless the app is installed.
 if (!profile.server) void navigator.storage?.persist?.().catch(() => false);

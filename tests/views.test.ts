@@ -1,7 +1,19 @@
 import { describe, expect, it } from 'vite-plus/test';
 import type { Snapshot } from '../src/core/client';
 import { DEFAULT_LISTS, makeDump, type Dump } from '../src/shared/schema';
-import { dueLabel, dumpsIn, homeRows, notebook, rows, search } from '../mobile/src/views';
+import {
+  byDay,
+  dayLabel,
+  dueLabel,
+  dumpsIn,
+  home,
+  linkHost,
+  needsAttention,
+  notebook,
+  search,
+  timeLabel,
+} from '../src/core/views';
+import { homeRows, rows } from '../mobile/src/views';
 
 const day = (date: string, hour: number) =>
   new Date(`${date}T${String(hour).padStart(2, '0')}:00:00`).getTime();
@@ -20,9 +32,9 @@ function snapshot(dumps: Dump[]): Snapshot {
   };
 }
 
-describe('phone app views', () => {
+describe('notebook views', () => {
   it('orders rows for an inverted list: newest first, each day heading after its dumps', () => {
-    const now = new Date(day('2026-10-04', 18));
+    const now = day('2026-10-04', 18);
     const book = notebook(
       snapshot([
         makeDump('older', crypto.randomUUID(), day('2026-10-03', 9)),
@@ -46,7 +58,7 @@ describe('phone app views', () => {
   });
 
   it('ends home in Today, read bottom up: today’s sections, then older days, then Done', () => {
-    const now = new Date(day('2026-10-17', 18));
+    const now = day('2026-10-17', 18);
     const make = (text: string, created: number, due: string | null = null) =>
       makeDump(text, crypto.randomUUID(), created, DEFAULT_LISTS, null, due);
     const finished = { ...make('finished', day('2026-10-15', 9)), done: true };
@@ -77,7 +89,7 @@ describe('phone app views', () => {
   });
 
   it('marks an empty Today as quiet, and gives its summary only the date', () => {
-    const now = new Date(day('2026-10-17', 18));
+    const now = day('2026-10-17', 18);
     const book = notebook(snapshot([makeDump('older', crypto.randomUUID(), day('2026-10-16', 9))]));
     const rows = homeRows(book, now);
     expect(rows.map((row) => (row.type === 'dump' ? row.dump.text : row.type))).toEqual([
@@ -91,7 +103,7 @@ describe('phone app views', () => {
   });
 
   it('names a due day from today: Today, Tomorrow, a weekday this week, else a date', () => {
-    const now = new Date(day('2026-10-17', 9));
+    const now = day('2026-10-17', 9);
     expect(dueLabel('2026-10-17', now)).toBe('Today');
     expect(dueLabel('2026-10-18', now)).toBe('Tomorrow');
     expect(dueLabel('2026-10-16', now)).toBe('Yesterday');
@@ -99,5 +111,60 @@ describe('phone app views', () => {
       new Date(2026, 9, 23).toLocaleDateString(undefined, { weekday: 'long' }),
     );
     expect(dueLabel('2027-01-05', now)).toContain('2027');
+  });
+
+  it('gives Today a summary on every client, and leaves Jev’s work out of Sort inbox', () => {
+    const now = day('2026-10-17', 18);
+    const make = (text: string, due: string | null) =>
+      makeDump(text, crypto.randomUUID(), day('2026-10-17', 9), DEFAULT_LISTS, null, due);
+    const sorting = make('being sorted', null);
+    const state = {
+      ...snapshot([make('late', '2026-10-15'), sorting]),
+      sorting: new Set([sorting.id]),
+    };
+    const book = notebook(state);
+    const plan = home(book, now);
+    expect(plan.sections.map((section) => section.label)).toEqual(['Overdue', 'Dumped today']);
+    expect(plan.heading).toMatch(/ · 1 overdue · Nothing due today$/);
+    const quiet = home(notebook(snapshot([])), now);
+    expect(quiet.quiet).toBe(true);
+    expect(quiet.heading).not.toContain('due today');
+    expect(book.unfiled.map((dump) => dump.text)).toEqual(['late']);
+  });
+
+  it('needs attention when this device cannot save or sync is offline, paused or signed out', () => {
+    const base = snapshot([]);
+    expect(needsAttention(base)).toBe(false);
+    expect(needsAttention({ ...base, sync: 'synced' })).toBe(false);
+    expect(needsAttention({ ...base, storageError: 'Disk full' })).toBe(true);
+    for (const sync of ['offline', 'error', 'signed-out'] as const)
+      expect(needsAttention({ ...base, sync })).toBe(true);
+  });
+
+  it('names capture days and times, and groups dumps by the day they were captured', () => {
+    const now = day('2026-10-17', 18);
+    expect(dayLabel('2026-10-17', now)).toBe('Today');
+    expect(dayLabel('2026-10-16', now)).toBe('Yesterday');
+    expect(dayLabel('2025-10-16', now)).toContain('2025');
+    expect(timeLabel(now - 30_000, now)).toBe('now');
+    expect(timeLabel(now - 5 * 60_000, now)).toBe('5m');
+    expect(timeLabel(now - 3 * 3_600_000, now)).toBe('3h');
+    expect(timeLabel(day('2026-10-16', 9), now)).toBe(
+      new Date(day('2026-10-16', 9)).toLocaleTimeString(undefined, {
+        hour: 'numeric',
+        minute: '2-digit',
+      }),
+    );
+    expect(linkHost('https://www.example.com/a')).toBe('example.com');
+    const make = (text: string, created: number) => makeDump(text, crypto.randomUUID(), created);
+    const groups = byDay([
+      make('a', day('2026-10-16', 9)),
+      make('b', day('2026-10-16', 20)),
+      make('c', day('2026-10-17', 9)),
+    ]);
+    expect(groups.map((group) => [group.day, group.dumps.map((dump) => dump.text)])).toEqual([
+      ['2026-10-16', ['a', 'b']],
+      ['2026-10-17', ['c']],
+    ]);
   });
 });

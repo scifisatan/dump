@@ -10,7 +10,6 @@ import {
   startOnboarding,
 } from './servers';
 
-// These tests start from a browser that has never set up a notebook.
 test.use({ storageState: { cookies: [], origins: [] } });
 
 const landing = 'Your mind is for ideas.';
@@ -32,7 +31,6 @@ test('a new visitor gets the landing page in place and onboards with a server', 
   ).toBeVisible();
   await page.screenshot({ path: 'test-results/onboarding-desktop.png' });
   await page.getByRole('button', { name: /Sync with your server/ }).click();
-  // A wrong key saves nothing.
   await connectServer(page, HOME, undefined, 'not-the-owner-key-not-the-owner-key');
   await expect(page.getByText('That owner key doesn’t match this server.')).toBeVisible();
   expect(await page.evaluate(() => localStorage.getItem('dump-connections'))).toBeNull();
@@ -60,7 +58,6 @@ test('a device-only notebook never contacts a server and can join one later', as
   await startOnboarding(page);
   await page.getByRole('button', { name: /Just this device/ }).click();
   await expect(page.getByRole('status')).toContainText('Saved on this device');
-  // A new notebook's empty Today offers dumps with days; one fills the composer.
   await expect(page.getByText('A clear day.')).toBeVisible();
   await page.screenshot({ path: 'test-results/today-empty-desktop.png' });
   await page.getByRole('button', { name: 'Pay rent by friday' }).click();
@@ -75,7 +72,6 @@ test('a device-only notebook never contacts a server and can join one later', as
   await expect(page.getByRole('article').getByText(text, { exact: true })).toBeVisible();
   await expect(page.getByRole('status')).toContainText('Saved on this device');
   expect(serverRequests).toEqual([]);
-  // Connecting later adds this notebook's thoughts to the server's.
   await page.getByRole('button', { name: 'Settings', exact: true }).click();
   await expect(page.getByText('This notebook lives only in this browser.')).toBeVisible();
   await connectServer(page, PEER, 'Connect and sync');
@@ -198,7 +194,6 @@ test('the API needs the owner key and answers only listed client origins', async
   expect(issued.ok()).toBe(true);
   const { ticket } = await issued.json();
   const upgrade = { ...origin, Upgrade: 'websocket' };
-  // Upgrades need a ticket bound to this notebook; a changed expiry breaks its signature.
   const forged = ticket.replace(/^\d+/, (expiry: string) => String(Number(expiry) - 1000));
   for (const query of [`instance=${instanceId}`, `instance=${instanceId}&ticket=${forged}`])
     expect((await request.get(`${HOME}/api/sync?${query}`, { headers: upgrade })).status()).toBe(
@@ -218,7 +213,6 @@ test('the API needs the owner key and answers only listed client origins', async
   });
   expect(preflight.status()).toBe(204);
   expect(preflight.headers()['access-control-allow-headers']).toContain('Authorization');
-  // Missing Origin and the server's own origin are refused too: the server hosts no UI.
   for (const path of ['/api/ping', '/api/sync'])
     for (const headers of [{ Origin: 'https://untrusted.example' }, { Origin: HOME }, {}]) {
       const rejected = await request.get(`${HOME}${path}`, { headers });

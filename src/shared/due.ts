@@ -1,18 +1,21 @@
 import type { Dump } from './schema';
 
-// A dump's due day is a calendar date, YYYY-MM-DD, in this device's time zone, with no time.
-// It is read from the dump's words at capture: today, tomorrow, a weekday, "in 3 days", "oct 24",
-// "the 24th", or 2026-10-24.
-
 const pad = (value: number) => String(value).padStart(2, '0');
 
-// The day `time` falls on in this device's time zone.
 export function dayKey(time: number | Date) {
   const date = new Date(time);
   return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`;
 }
 
-// A local calendar date, or null when that day does not exist (February 30).
+export function startOfDay(time: number | Date) {
+  const date = new Date(time);
+  return new Date(date.getFullYear(), date.getMonth(), date.getDate());
+}
+export function dayFromKey(key: string) {
+  const [year, month, day] = key.split('-').map(Number);
+  return new Date(year ?? 0, (month ?? 1) - 1, day ?? 1);
+}
+
 function calendar(year: number, month: number, day: number) {
   const date = new Date(year, month, day);
   return date.getMonth() === month && date.getDate() === day ? date : null;
@@ -33,8 +36,6 @@ const COUNTS = new Map([
   ['three', 3],
 ]);
 
-// A weekday is its next occurrence, today included. "next friday" is the Friday of next week,
-// counting weeks from Monday.
 function weekday(today: Date, name: string, qualifier: string | undefined) {
   const target = WEEKDAYS.indexOf(name.slice(0, 3));
   if (qualifier !== 'next') return plus(today, (target - today.getDay() + 7) % 7);
@@ -42,7 +43,6 @@ function weekday(today: Date, name: string, qualifier: string | undefined) {
   return plus(nextMonday, (target + 6) % 7);
 }
 
-// A month and day without a year is the next one, today included.
 function monthDay(today: Date, month: string, day: string, year: string | undefined) {
   const index = MONTHS.indexOf(month.slice(0, 3));
   if (year) return calendar(Number(year), index, Number(day));
@@ -51,7 +51,6 @@ function monthDay(today: Date, month: string, day: string, year: string | undefi
   return calendar(today.getFullYear() + 1, index, Number(day));
 }
 
-// "the 24th" is the next 24th, today included, skipping months too short to have one.
 function dayOfMonth(today: Date, day: number) {
   for (let ahead = 0; ahead < 12; ahead++) {
     const date = calendar(today.getFullYear(), today.getMonth() + ahead, day);
@@ -61,7 +60,6 @@ function dayOfMonth(today: Date, day: number) {
 }
 
 type Rule = { pattern: RegExp; resolve(match: RegExpExecArray, today: Date): Date | null };
-// Each match is tried at its earliest position in the text; on a tie, the earlier rule wins.
 const RULES: Rule[] = [
   {
     pattern: /\b(\d{4})-(\d{2})-(\d{2})\b/,
@@ -102,12 +100,9 @@ const RULES: Rule[] = [
   },
 ];
 
-// The day a capture names, relative to `now`, or null when it names none. Links are skipped, so
-// a date in a URL's path is not read as a due day. The earliest phrase in the text wins.
 export function parseDue(text: string, now: number): string | null {
   const words = text.toLowerCase().replace(/https?:\/\/\S+/g, (link) => ' '.repeat(link.length));
-  const time = new Date(now);
-  const today = new Date(time.getFullYear(), time.getMonth(), time.getDate());
+  const today = startOfDay(now);
   let found: { at: number; day: Date } | undefined;
   for (const rule of RULES) {
     const match = rule.pattern.exec(words);
@@ -118,14 +113,19 @@ export function parseDue(text: string, now: number): string | null {
   return found ? dayKey(found.day) : null;
 }
 
+export const isOverdue = (dump: Dump, now: number) =>
+  !dump.done && dump.due !== null && dump.due < dayKey(now);
+
+export function dayChoices(now: number) {
+  const today = startOfDay(now);
+  return { today: dayKey(today), tomorrow: dayKey(plus(today, 1)) };
+}
+
 const byCreated = (a: Dump, b: Dump) => a.created_at - b.created_at || a.id.localeCompare(b.id);
 
-// Home on every client: older undated dumps, then Today just above the composer. Each part is in
-// display order, top to bottom. `open` is the open dumps, in any order.
 export function agenda(open: Dump[], now: number) {
   const today = dayKey(now);
-  const time = new Date(now);
-  const start = new Date(time.getFullYear(), time.getMonth(), time.getDate()).getTime();
+  const start = startOfDay(now).getTime();
   const dated = open
     .flatMap((dump) => (dump.due ? [{ dump, due: dump.due }] : []))
     .sort((a, b) => a.due.localeCompare(b.due) || byCreated(a.dump, b.dump));
@@ -133,14 +133,10 @@ export function agenda(open: Dump[], now: number) {
   const pick = (keep: (due: string) => boolean) =>
     dated.filter(({ due }) => keep(due)).map(({ dump }) => dump);
   return {
-    // Undated dumps captured before today, by the day they were captured.
     earlier: undated.filter((dump) => dump.created_at < start),
-    // Open dumps whose day has passed stay here until they are done, moved or undated.
     overdue: pick((due) => due < today),
     due: pick((due) => due === today),
     upcoming: pick((due) => due > today),
-    // Today's undated dumps, newest at the bottom.
     dumped: undated.filter((dump) => dump.created_at >= start),
   };
 }
-export type Agenda = ReturnType<typeof agenda>;

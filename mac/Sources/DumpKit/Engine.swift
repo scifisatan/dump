@@ -12,22 +12,14 @@ public struct EngineError: LocalizedError, Equatable {
 
 let log = Logger(subsystem: "np.com.abishrestha.dump", category: "engine")
 
-/// Runs the web app's notebook core (mac/engine, bundled as engine.js) in JavaScriptCore and gives
-/// it the platform a browser would: timers, randomness, HTTP, WebSockets, files and network state.
-/// Everything, JavaScript included, runs on the main thread.
 @MainActor
 public final class Engine {
-  /// Called once per run of main-queue work after the notebook changed.
   public var onChange: (() -> Void)?
-  /// The owner key for a profile ID, read whenever sync or filing needs it.
-  public var ownerKey: (String) -> String? = { _ in nil }
-  /// The Origin header for a request to a server.
-  public var origin: (URL) -> String = ClientOrigin.standard(for:)
-
-  public private(set) var isOnline = true
 
   private let context: JSContext
   private let directory: URL
+  private let settings: UserDefaults
+  private let keys: OwnerKeys
   private let writer = DispatchQueue(label: "np.com.abishrestha.dump.notebook-writer")
   private var timers: [Int: DispatchWorkItem] = [:]
   private var http: HTTPBridge!
@@ -36,9 +28,10 @@ public final class Engine {
   private var changePending = false
   private var exception: String?
 
-  /// `directory` holds one JSON file per notebook.
-  public init(directory: URL, script: String? = nil) throws {
+  public init(directory: URL, settings: UserDefaults = .standard, keys: OwnerKeys = OwnerKeys()) throws {
     self.directory = directory
+    self.settings = settings
+    self.keys = keys
     try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
     guard let context = JSContext() else { throw EngineError("JavaScriptCore is unavailable.") }
     self.context = context
@@ -49,72 +42,65 @@ public final class Engine {
       let stack = value?.objectForKeyedSubscript("stack")?.toString() ?? ""
       log.error("JavaScript: \(message, privacy: .public)\n\(stack, privacy: .public)")
     }
-    let origin: (URL) -> String = { [weak self] url in
-      self?.origin(url) ?? ClientOrigin.standard(for: url)
-    }
-    http = HTTPBridge(origin: origin) { [weak self] id, response in
+    http = HTTPBridge { [weak self] id, response in
       let error: Any = response.error ?? NSNull()
       let arguments: [Any] = [id, response.status, response.headers, response.body, response.url, error]
       self?.callHost("response", arguments)
     }
-    sockets = SocketBridge(origin: origin) { [weak self] id, type, data, code in
+    sockets = SocketBridge { [weak self] id, type, data, code in
       self?.callHost("socket", [id, type, data, code])
     }
     installNative()
-    context.evaluateScript(try script ?? Engine.bundledScript(), withSourceURL: URL(string: "dump://engine.js"))
+    context.evaluateScript(try Engine.bundledScript(), withSourceURL: URL(string: "dump://engine.js"))
     if let failure = takeException() { throw EngineError("The notebook engine failed to load: \(failure)") }
     watchNetwork()
   }
 
   // MARK: Notebook
 
-  public func open(_ profile: Profile) async throws {
-    let config = String(decoding: try JSONEncoder().encode(profile), as: UTF8.self)
-    try await callAsync("open", [config])
+  public func launch() async throws {
+    try await callAsync("launch")
   }
 
-  /// Saves and closes the open notebook. Throws, leaving it open, when saving fails.
   public func close() async throws {
     try await callAsync("close")
   }
 
-  /// `full` includes every dump, for the notebook window.
-  public func snapshot(full: Bool = false) -> Snapshot? {
-    guard let json = try? call("snapshot", [full]).toString() else { return nil }
-    return try? JSONDecoder().decode(Snapshot?.self, from: Data(json.utf8))
+  public func snapshot(full: Bool = false) throws -> Snapshot? {
+    try decode(Snapshot?.self, call("snapshot", [full]))
   }
 
-  /// The list a leading `!list` in the draft files to, if any.
-  public func list(forDraft text: String) -> String? {
-    guard let value = try? call("listFor", [text]), value.isString else { return nil }
-    return value.toString()
+  public func search(_ query: String) throws -> [Snapshot.Section] {
+    try decode([Snapshot.Section].self, call("search", [query]))
   }
 
-  /// The day the draft names (YYYY-MM-DD), if any, read as the web composer reads it.
-  public func due(forDraft text: String) -> String? {
-    guard let value = try? call("dueFor", [text]), value.isString else { return nil }
-    return value.toString()
+  public func list(forDraft text: String) throws -> String? {
+    let value = try call("listFor", [text])
+    return value.isString ? value.toString() : nil
   }
 
-  /// Saves a dump synchronously. `list` files it unless the text names a list with `!list`.
-  /// `due` is the day the composer showed (usually `due(forDraft:)`), or nil for none.
+  public func due(forDraft text: String) throws -> Day? {
+    try decode(Day?.self, call("dueFor", [text]))
+  }
+
+  public func day(at date: Date) throws -> Day {
+    try decode(Day.self, call("dayAt", [date.timeIntervalSince1970 * 1000]))
+  }
+
   public func capture(_ text: String, list: String?, due: String?) throws -> Captured {
-    let json = try call("capture", [text, list ?? NSNull(), due ?? NSNull()]).toString() ?? ""
-    return try JSONDecoder().decode(Captured.self, from: Data(json.utf8))
+    try decode(Captured.self, call("capture", [text, list ?? NSNull(), due ?? NSNull()]))
   }
 
-  // MARK: Dumps and lists. Every change is final; there is no undo.
+  // MARK: Dumps and lists
 
   public func setDone(_ id: String, _ done: Bool) throws {
     try call("setDone", [id, done])
   }
 
-  /// Moves a dump to another day (YYYY-MM-DD), or takes its day away (nil).
   public func setDue(_ id: String, _ due: String?) throws {
     try call("setDue", [id, due ?? NSNull()])
   }
 
-  /// Files a dump by hand; nil returns it to the inbox.
   public func file(_ id: String, list: String?) throws {
     try call("file", [id, list ?? NSNull()])
   }
@@ -123,46 +109,50 @@ public final class Engine {
     try call("remove", [id])
   }
 
-  /// Creates a list, or renames and recolors the one with `id`.
   @discardableResult
   public func saveList(label: String, color: String, id: String? = nil) throws -> Snapshot.List {
-    let json = try call("saveList", [label, color, id ?? NSNull()]).toString() ?? ""
-    return try JSONDecoder().decode(Snapshot.List.self, from: Data(json.utf8))
+    try decode(Snapshot.List.self, call("saveList", [label, color, id ?? NSNull()]))
   }
 
-  /// Deletes a list; its dumps go back to the inbox.
   public func deleteList(_ id: String) throws {
     try call("deleteList", [id])
   }
 
-  /// Removes every done dump and returns how many there were.
   @discardableResult
   public func clearDone() throws -> Int {
     Int(try call("clearDone").toInt32())
   }
 
-  /// Resumes sync after the owner key was entered again.
-  public func reconnect() { _ = try? call("reconnect") }
-  /// Retries sync now, as on wake or when the panel opens.
-  public func resume() { _ = try? call("resume") }
-  /// Flushes storage, as before sleep.
-  public func suspend() { _ = try? call("suspend") }
+  public func resume() { notify("resume") }
+  public func suspend() { notify("suspend") }
 
-  // MARK: Servers
+  // MARK: Notebooks and servers
 
-  public func inspect(_ address: String) async throws -> ServerCheck {
-    let json = try await callAsync("inspect", [address]).toString() ?? ""
-    return try JSONDecoder().decode(ServerCheck.self, from: Data(json.utf8))
+  public func check(_ address: String) async throws -> ServerCheck {
+    try decode(ServerCheck.self, await callAsync("check", [address]))
   }
 
-  /// Checks an owner key against a server without saving anything.
-  public func verify(_ baseUrl: String, key: String) async throws {
-    try await callAsync("verify", [baseUrl, key])
+  public func connect(_ server: ServerCheck, key: String) async throws {
+    let location = String(decoding: try JSONEncoder().encode(server.location), as: UTF8.self)
+    try await callAsync("connect", [location, key])
+  }
+
+  public func signIn(key: String) async throws {
+    try await callAsync("signIn", [key])
+  }
+
+  public func switchTo(_ profile: Profile) async throws {
+    try await callAsync("switchTo", [profile.id])
+  }
+
+  @discardableResult
+  public func chooseWebApp(_ input: String) throws -> String? {
+    let value = try call("chooseWebApp", [input])
+    return value.isString ? value.toString() : nil
   }
 
   // MARK: Calling JavaScript
 
-  /// Evaluates source in the engine's context; for tests.
   func evaluate(_ source: String) throws -> JSValue {
     exception = nil
     let value = context.evaluateScript(source)
@@ -177,6 +167,16 @@ public final class Engine {
     let value = api?.invokeMethod(method, withArguments: arguments)
     if let failure = takeException() { throw EngineError(failure) }
     return value ?? JSValue(undefinedIn: context)
+  }
+
+  private func notify(_ method: String, _ arguments: [Any] = []) {
+    do { try call(method, arguments) } catch {
+      log.error("\(method, privacy: .public): \(error.localizedDescription, privacy: .public)")
+    }
+  }
+
+  private func decode<T: Decodable>(_ type: T.Type, _ value: JSValue) throws -> T {
+    try JSONDecoder().decode(type, from: Data((value.toString() ?? "").utf8))
   }
 
   @discardableResult
@@ -263,8 +263,8 @@ public final class Engine {
     let cancelRequest: @convention(block) (Int) -> Void = { [weak self] id in self?.http.cancel(id) }
     define("cancelRequest", cancelRequest)
 
-    let socketOpen: @convention(block) (Int, String) -> Void = { [weak self] id, url in
-      self?.sockets.open(id: id, url: url)
+    let socketOpen: @convention(block) (Int, String, String) -> Void = { [weak self] id, url, origin in
+      self?.sockets.open(id: id, url: url, origin: origin)
     }
     define("socketOpen", socketOpen)
     let socketSend: @convention(block) (Int, String) -> Void = { [weak self] id, data in
@@ -304,13 +304,33 @@ public final class Engine {
     }
     define("writeFile", writeFile)
 
-    let isOnline: @convention(block) () -> Bool = { [weak self] in self?.isOnline ?? true }
-    define("isOnline", isOnline)
+    // Settings written before the engine kept them may be JSON data rather than text.
+    let readSetting: @convention(block) (String) -> JSValue = { [weak self] name in
+      guard let self else { return null() }
+      let value = self.settings.string(forKey: name)
+        ?? self.settings.data(forKey: name).map { String(decoding: $0, as: UTF8.self) }
+      return value.map { JSValue(object: $0, in: self.context) } ?? null()
+    }
+    define("readSetting", readSetting)
+    let writeSetting: @convention(block) (String, JSValue) -> Void = { [weak self] name, value in
+      if value.isNull || value.isUndefined { self?.settings.removeObject(forKey: name) } else {
+        self?.settings.set(value.toString(), forKey: name)
+      }
+    }
+    define("writeSetting", writeSetting)
     let ownerKey: @convention(block) (String) -> JSValue = { [weak self] profileId in
-      guard let self, let key = self.ownerKey(profileId) else { return null() }
+      guard let self, let key = self.keys.read(profileId) else { return null() }
       return JSValue(object: key, in: self.context)
     }
     define("ownerKey", ownerKey)
+    let saveOwnerKey: @convention(block) (String, String, String) -> Void = {
+      [weak self] profileId, key, server in
+      guard let self else { return }
+      do { try self.keys.save(key, for: profileId, server: server) } catch {
+        self.context.exception = JSValue(newErrorFromMessage: error.localizedDescription, in: self.context)
+      }
+    }
+    define("saveOwnerKey", saveOwnerKey)
     let changed: @convention(block) () -> Void = { [weak self] in
       guard let self, !self.changePending else { return }
       self.changePending = true
@@ -334,11 +354,7 @@ public final class Engine {
   private func watchNetwork() {
     monitor.pathUpdateHandler = { [weak self] path in
       let online = path.status == .satisfied
-      DispatchQueue.main.async { [weak self] in
-        guard let self, self.isOnline != online else { return }
-        self.isOnline = online
-        _ = try? self.call("network", [online])
-      }
+      DispatchQueue.main.async { [weak self] in self?.notify("network", [online]) }
     }
     monitor.start(queue: DispatchQueue(label: "np.com.abishrestha.dump.network"))
   }

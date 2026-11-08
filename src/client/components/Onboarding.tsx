@@ -1,14 +1,17 @@
 import { useState, type ComponentType } from 'react';
 import { ArrowLeft, Cloud, Laptop } from 'lucide-react';
-import type { ServerLocation } from '../../core/connection';
-import { activateProfile, deviceOnlyProfile, profileForServer, saveKey } from '../profiles';
+import { verifyKey, type ServerLocation, type ServerProfile } from '../../core/connection';
+import { deviceOnlyProfile } from '../../core/profiles';
+import { registry, reopen, saveKey } from '../profiles';
 import { ServerConnection } from './ServerConnection';
 import { Button } from './ui/button';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from './ui/dialog';
 
 const SETUP_GUIDE = 'https://github.com/scifisatan/dump#deploy-your-server';
-// No notebook is open during first-run setup, so there is nothing to close before switching.
-const nothingOpen = async () => {};
+function open(profile: ServerProfile) {
+  registry.activate(profile);
+  reopen();
+}
 
 function Choice({
   Icon,
@@ -35,15 +38,14 @@ function Choice({
   );
 }
 
-// First-run setup from the landing page. Nothing is saved until a server accepts the owner key
-// or the visitor keeps the notebook on this device; the page then reopens as the notebook.
 export default function Onboarding({ onClose }: { onClose: () => void }) {
   const [step, setStep] = useState<'choose' | 'server'>('choose');
 
-  async function connectServer(server: ServerLocation, key: string) {
-    const profile = profileForServer(server);
+  async function connectServer(server: ServerLocation, key: string, signal: AbortSignal) {
+    await verifyKey(server.baseUrl, key, signal);
+    const profile = registry.joining(undefined, server);
     saveKey(profile.id, key);
-    await activateProfile(profile, nothingOpen);
+    open(profile);
   }
 
   return (
@@ -83,7 +85,7 @@ export default function Onboarding({ onClose }: { onClose: () => void }) {
               Icon={Laptop}
               title="Just this device"
               body="Nothing leaves this browser. No sync or automatic filing; export backups from Settings."
-              onClick={() => void activateProfile(deviceOnlyProfile(), nothingOpen)}
+              onClick={() => open(deviceOnlyProfile())}
             />
           </div>
         ) : (

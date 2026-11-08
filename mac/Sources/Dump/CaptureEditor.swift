@@ -2,9 +2,6 @@ import AppKit
 import Carbon.HIToolbox
 import SwiftUI
 
-/// A capture text box, in the panel and the notebook window: grows with its text up to a few
-/// lines, then scrolls. Return saves, Shift- or Option-Return adds a line, Escape cancels. In the
-/// panel, Tab moves through lists and ⌘0–⌘9 pick one; without those handlers Tab moves focus.
 struct CaptureEditor: NSViewRepresentable {
   @Binding var text: String
   var font = CaptureEditor.font

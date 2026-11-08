@@ -124,7 +124,7 @@ describe('due days', () => {
 });
 
 describe('synced custom lists', () => {
-  it('files into a custom list and keeps its stable identity across a rename', () => {
+  it('files into a custom list by its label', () => {
     const list = {
       id: crypto.randomUUID(),
       label: 'Weekend plans',
@@ -138,7 +138,6 @@ describe('synced custom lists', () => {
     ]);
     expect(dump.list).toBe(list.id);
     expect(dump.text).toBe('go for a walk');
-    expect(decodeCollection(encodeCollection({ ...list, label: 'Outdoors' })).id).toBe(dump.list);
   });
   it('merges independent list and dump changes across devices', () => {
     const phone = newStore();

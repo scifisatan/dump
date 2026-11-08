@@ -2,22 +2,11 @@ import { createCustomPersister, Persists } from 'tinybase/persisters';
 import type { MergeableContent } from 'tinybase';
 import type { ClientPlatform } from '../../src/core/client';
 import type { ServerProfile } from '../../src/core/connection';
+import { deviceEvents } from '../../src/core/device';
 import { createServerLink } from '../../src/core/server-link';
 import { host, native } from './native';
 
-// Device events from the host (network changes, wake, sleep), routed to the open notebook.
-const watchers = new Set<{ resume(): void; offline(): void; suspend(): void }>();
-export const deviceEvents = {
-  network(online: boolean) {
-    for (const watcher of watchers) (online ? watcher.resume : watcher.offline)();
-  },
-  resume() {
-    for (const watcher of watchers) watcher.resume();
-  },
-  suspend() {
-    for (const watcher of watchers) watcher.suspend();
-  },
-};
+export const device = deviceEvents();
 
 let nextWrite = 1;
 const writes = new Map<number, (error: string | null) => void>();
@@ -45,8 +34,6 @@ function restore(value: unknown): unknown {
   return value;
 }
 
-// The Mac app: one JSON file per notebook in the app's data folder, the server through the shared
-// link, and one process, so there are no tabs to keep in step.
 export function macPlatform(profile: ServerProfile): ClientPlatform {
   const file = `${profile.id}.json`;
   return {
@@ -67,12 +54,7 @@ export function macPlatform(profile: ServerProfile): ClientPlatform {
     }),
     storageFailure: 'This Mac could not save your changes. Keep Dump open and try again.',
     server: profile.server && createServerLink(profile.server, () => native.ownerKey(profile.id)),
-    isOnline: () => native.isOnline(),
-    watch(resume, offline, suspend) {
-      const watcher = { resume, offline, suspend };
-      watchers.add(watcher);
-      return () => watchers.delete(watcher);
-    },
-    tabs: () => ({ async start() {}, async destroy() {} }),
+    isOnline: device.isOnline,
+    watch: device.watch,
   };
 }

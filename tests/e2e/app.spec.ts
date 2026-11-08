@@ -92,7 +92,6 @@ test('prefix filing, search, export and additive restore work', async ({ page })
   await page.goto('/');
   await page.getByRole('textbox', { name: 'Capture a thought' }).fill(`!buy ${text}`);
   await page.getByRole('button', { name: 'Save dump', exact: true }).click();
-  // A card's list name opens that list.
   await page
     .getByRole('article')
     .filter({ hasText: text })
@@ -114,7 +113,6 @@ test('prefix filing, search, export and additive restore work', async ({ page })
   await expect(page.getByText('0 dumps restored. Existing items were kept.')).toBeVisible();
 });
 
-// Stands in for the server's Jev proxy: answers with `list` after `delay` ms.
 async function fakeJev(page: Page, list: string | null, delay: number) {
   await page.route('**/api/ping', async (route) => {
     const response = await route.fetch();
@@ -137,7 +135,6 @@ test('captures appear at once and Jev files them into a list afterwards', async 
   const card = page.getByRole('article').filter({ hasText: text });
   await expect(input).toHaveValue('');
   await expect(card).toContainText('Sorting…');
-  // Home shows every open dump alongside the list Jev chose.
   await expect(card).toContainText('Buy');
   await expect(card).not.toContainText('Sorting…');
   await card.getByRole('button', { name: 'Open Buy' }).click();
@@ -178,7 +175,6 @@ test('without Jev, captures stay in the inbox unfiled', async ({ page }) => {
   await page.waitForTimeout(500);
   await expect(card).not.toContainText('Sorting…');
   await expect(card).not.toContainText('To do');
-  // Every list gets a button, custom ones included, and number keys follow list order.
   await page.getByRole('button', { name: 'Search your space' }).click();
   const lists = await page
     .locator('[cmdk-group]')
@@ -195,7 +191,6 @@ test('without Jev, captures stay in the inbox unfiled', async ({ page }) => {
   await expect(dialog.getByRole('button', { name: /^Ideas/ })).toContainText('1');
   expect(lists).toBeGreaterThanOrEqual(5);
   expect(await listButtons.count()).toBeGreaterThanOrEqual(lists);
-  // The count disappears once the last unfiled thought is sorted.
   const count = dialog.getByText(/thoughts? to give a home/);
   const remaining = async () =>
     (await count.count()) ? Number((await count.textContent())?.match(/\d+/)?.[0]) : 0;
@@ -218,7 +213,6 @@ test('Today shows what is overdue, due and coming up, and a day can move or clea
   await input.fill(late);
   await input.press('Enter');
   await input.fill(due);
-  // The composer shows the day it read before the dump is sent.
   const skip = page.getByRole('button', { name: 'Dump without a date' });
   await expect(page.locator('form').filter({ has: skip })).toContainText('Due Today');
   await input.press('Enter');
@@ -285,11 +279,9 @@ test('live sync reaches an open device without polling', async ({ browser, reque
   const text = `Live sync ${crypto.randomUUID().slice(0, 8)}`;
   await a.getByRole('textbox', { name: 'Capture a thought' }).fill(text);
   await a.getByRole('button', { name: 'Save dump', exact: true }).click();
-  // No polling: the edit arrives over the open WebSocket.
   await expect(b.getByRole('article').getByText(text, { exact: true })).toBeVisible({
     timeout: 5_000,
   });
-  // Plain requests are refused; only WebSocket upgrades reach the sync server.
   const plain = await request.get('http://localhost:6192/api/sync', {
     headers: { Origin: 'http://localhost:6194' },
   });
@@ -331,11 +323,9 @@ test('custom lists, filing and renaming sync and survive reload', async ({ brows
   await expect(a.getByRole('heading', { level: 1 })).toHaveText(new RegExp(name));
   await expect(a.getByRole('heading', { name: 'Room for something good.' })).toBeVisible();
   await a.screenshot({ path: 'test-results/empty-list-desktop.png' });
-  // A list's composer files into that list without a `!list` prefix.
   await a.getByRole('textbox', { name: 'Capture a thought' }).fill(thought);
   await a.getByRole('button', { name: 'Save dump', exact: true }).click();
   await expect(a.getByRole('article').getByText(thought, { exact: true })).toBeVisible();
-  // The composer moves from the centered empty state to the bottom and keeps focus.
   await expect(a.getByRole('textbox', { name: 'Capture a thought' })).toBeFocused();
   await openList(b, name);
   await expect(b.getByRole('article').getByText(thought, { exact: true })).toBeVisible();
@@ -427,7 +417,6 @@ test('marketing is separate from notebook initialization and preserves the origi
   await page.setViewportSize({ width: 390, height: 844 });
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
   await page.screenshot({ path: 'test-results/marketing-mobile.png', fullPage: true });
-  // Opening the notebook from here loads its code behind the same loading screen.
   await page.getByRole('link', { name: 'Open your space' }).click();
   await expect(page.getByRole('textbox', { name: 'Capture a thought' })).toBeEnabled();
   await expect(page.getByRole('progressbar', { name: 'Opening Dump' })).toBeHidden();

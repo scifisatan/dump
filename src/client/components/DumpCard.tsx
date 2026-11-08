@@ -1,10 +1,10 @@
 import { useState } from 'react';
 import { ArrowUpRight, CalendarDays, Check, Circle, MoreHorizontal, Trash2 } from 'lucide-react';
-import { differenceInHours, differenceInMinutes, format, isToday } from 'date-fns';
-import { dayKey } from '../../shared/due';
+import { dueLabel, linkHost, timeLabel } from '../../core/views';
+import { isOverdue } from '../../shared/due';
 import type { Collection, Dump } from '../../shared/schema';
 import { cn } from '../lib/utils';
-import { DueMenuItems, DuePicker, dueLabel } from './DueDate';
+import { DueMenuItems, DuePicker } from './DueDate';
 import { ListDot } from './ListDot';
 import { Button } from './ui/button';
 import {
@@ -28,15 +28,6 @@ export type DumpActions = {
   tag: (tag: string) => void;
 };
 
-// Rows sit under a day heading, so today's rows show a short age and older rows their time.
-function shortTime(time: number) {
-  if (!isToday(time)) return format(time, 'h:mm a');
-  const minutes = differenceInMinutes(Date.now(), time);
-  if (minutes < 1) return 'now';
-  if (minutes < 60) return `${minutes}m`;
-  return `${differenceInHours(Date.now(), time)}h`;
-}
-
 export function DumpCard({
   dump,
   lists,
@@ -48,12 +39,12 @@ export function DumpCard({
   lists: Collection[];
   actions: DumpActions;
   showList?: boolean;
-  // Jev is still choosing this dump's list.
   sorting?: boolean;
 }) {
   const [picking, setPicking] = useState(false);
   const list = showList ? lists.find((item) => item.id === dump.list) : undefined;
-  const overdue = !dump.done && dump.due !== null && dump.due < dayKey(Date.now());
+  const now = Date.now();
+  const overdue = isOverdue(dump, now);
   const hasMeta = list || sorting || dump.due || dump.tags.length > 0 || dump.url;
   const dueItems = (
     <DueMenuItems
@@ -90,10 +81,10 @@ export function DumpCard({
                       'inline-flex items-center gap-1 rounded-[4px] px-1.5 py-0.25 hover:text-foreground',
                       overdue ? 'bg-destructive/10 text-destructive' : 'bg-muted',
                     )}
-                    aria-label={`${overdue ? 'Overdue' : 'Due'} ${dueLabel(dump.due)}: change date`}
+                    aria-label={`${overdue ? 'Overdue' : 'Due'} ${dueLabel(dump.due, now)}: change date`}
                   >
                     <CalendarDays size={11} />
-                    {dueLabel(dump.due)}
+                    {dueLabel(dump.due, now)}
                   </button>
                 </DropdownMenuTrigger>
                 <DropdownMenuContent align="start">{dueItems}</DropdownMenuContent>
@@ -127,7 +118,7 @@ export function DumpCard({
                 target="_blank"
                 rel="noopener noreferrer"
               >
-                {new URL(dump.url).hostname.replace(/^www\./, '')}
+                {linkHost(dump.url)}
                 <ArrowUpRight size={11} />
               </a>
             )}
@@ -137,9 +128,12 @@ export function DumpCard({
       <time
         className="shrink-0 pt-1 text-[11px] text-muted-foreground tabular-nums max-phone:pt-1.5"
         dateTime={new Date(dump.created_at).toISOString()}
-        title={format(dump.created_at, 'PPpp')}
+        title={new Date(dump.created_at).toLocaleString(undefined, {
+          dateStyle: 'medium',
+          timeStyle: 'medium',
+        })}
       >
-        {shortTime(dump.created_at)}
+        {timeLabel(dump.created_at, now)}
       </time>
       <DropdownMenu>
         <DropdownMenuTrigger asChild>

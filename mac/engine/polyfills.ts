@@ -7,6 +7,7 @@ import 'core-js/actual/structured-clone';
 import 'core-js/actual/url';
 import 'core-js/actual/url-search-params';
 import { describe, host, native, report } from './native';
+import { origin } from './settings';
 
 const install = (name: string, value: unknown) =>
   Object.defineProperty(globalThis, name, { value, writable: true, configurable: true });
@@ -301,6 +302,7 @@ install(
       });
       const headers: [string, string][] = [];
       new Headers(init.headers).forEach((value, name) => headers.push([name, value]));
+      headers.push(['Origin', origin.for(url)]);
       const body = init.body;
       native.request(
         id,
@@ -354,7 +356,7 @@ class WebSocket extends Target {
     super();
     this.url = String(url);
     sockets.set(this.#id, this);
-    native.socketOpen(this.#id, this.url);
+    native.socketOpen(this.#id, this.url, origin.for(this.url));
   }
   send(data: unknown) {
     if (this.readyState === CONNECTING)

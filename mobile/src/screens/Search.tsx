@@ -7,11 +7,9 @@ import { useSession, useSnapshot } from '../notebook';
 import { useColors } from '../theme';
 import { EmptyState, Icon, icons, ListDot, Row, Section } from '../ui';
 import { Menu } from '../menu';
-import { notebook, search, type Place } from '../views';
+import { dumpsIn, notebook, search, type Place } from '../../../src/core/views';
 import { confirmDeleteList } from './Notebook';
 
-// Search across everything, and the way to the lists and Done, as the web app's ⌘K. Choosing a
-// view replaces this screen, so going back from it returns home.
 export function Search({ navigation }: ScreenProps<'Search'>) {
   const { client } = useSession();
   const snapshot = useSnapshot();
@@ -98,7 +96,7 @@ export function Search({ navigation }: ScreenProps<'Search'>) {
                 <ListDot color={list.color} size={10} />
               </View>
               <Text style={[styles.label, { color: colors.foreground }]}>{list.label}</Text>
-              {count(book.open.filter((dump) => dump.list === list.id).length)}
+              {count(dumpsIn({ kind: 'list', id: list.id }, book).length)}
               <Icon name={icons.chevron} size={13} color={colors.faint} />
             </Row>
           </Menu>

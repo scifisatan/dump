@@ -130,19 +130,17 @@ export function SettingsDialog({
             const file = event.target.files?.[0];
             event.target.value = '';
             if (!file) return;
+            if (file.size > 8 * 1024 * 1024) {
+              toast.error('Please use a backup smaller than 8 MB.');
+              return;
+            }
             try {
-              if (file.size > 8 * 1024 * 1024)
-                throw new Error('Please use a backup smaller than 8 MB.');
               const count = client.importDumps(JSON.parse(await file.text()));
               toast(
                 `${count} ${count === 1 ? 'dump' : 'dumps'} restored. Existing items were kept.`,
               );
-            } catch (error) {
-              toast.error(
-                error instanceof Error && error.message.includes('8 MB')
-                  ? error.message
-                  : 'This is not a compatible Dump backup. Nothing was imported.',
-              );
+            } catch {
+              toast.error('This is not a compatible Dump backup. Nothing was imported.');
             }
           }}
         />

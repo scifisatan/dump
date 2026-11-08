@@ -3,28 +3,20 @@ import { ActivityIndicator, StyleSheet, Text, TextInput, View } from 'react-nati
 import { KeyboardAwareScrollView } from 'react-native-keyboard-controller';
 import type { ScreenProps } from '../App';
 import { failed } from '../DumpRow';
-import {
-  connect,
-  inspect,
-  signIn,
-  switchTo,
-  useSession,
-  useSnapshot,
-  type ServerCheck,
-} from '../notebook';
-import { originOverride, setOriginOverride, standardOrigin, HOSTED_ORIGIN } from '../origin';
-import { readProfiles } from '../profiles';
+import { checkServer, type ServerCheck } from '../../../src/core/connection';
+import { connect, signIn, switchTo, useSession, useSnapshot } from '../notebook';
+import { origin } from '../origin';
+import { registry } from '../profiles';
 import { useColors, type Colors } from '../theme';
 import { Button, Mark, Row, Section, syncLabel, syncTint } from '../ui';
 
-// Sync and connections, following the web app's rules (ServerSettings.tsx) as the Mac does.
 export function Settings({ navigation }: ScreenProps<'Settings'>) {
   const session = useSession();
   const snapshot = useSnapshot();
   const colors = useColors();
   const server = session.profile.server;
   const [switching, setSwitching] = useState(false);
-  const others = readProfiles().profiles.filter((profile) => profile.id !== session.profile.id);
+  const others = registry.others();
 
   useLayoutEffect(() => {
     navigation.setOptions({
@@ -128,7 +120,6 @@ export function Settings({ navigation }: ScreenProps<'Settings'>) {
   );
 }
 
-// Finds a Dump server, then checks its owner key before anything is saved.
 function ServerConnection({ action, colors }: { action: string; colors: Colors }) {
   const [address, setAddress] = useState('');
   const [key, setKey] = useState('');
@@ -150,7 +141,7 @@ function ServerConnection({ action, colors }: { action: string; colors: Colors }
   };
   const check = () =>
     void run(async () => {
-      setChecked(await inspect(address));
+      setChecked(await checkServer(address));
     });
   const join = () =>
     void run(async () => {
@@ -215,7 +206,6 @@ function ServerConnection({ action, colors }: { action: string; colors: Colors }
   );
 }
 
-// Shown when the server refused this phone's key, because it is wrong or was rotated.
 function SignIn({ colors }: { colors: Colors }) {
   const [key, setKey] = useState('');
   const [busy, setBusy] = useState(false);
@@ -273,14 +263,12 @@ function Advanced({
   server: string | undefined;
   retry: () => void;
 }) {
-  const [origin, setOrigin] = useState(originOverride() ?? '');
+  const [address, setAddress] = useState(origin.chosen() ?? '');
   const [error, setError] = useState<string | null>(null);
-  // A valid address applies as it is typed, so a server checked next already sees it; an invalid
-  // one keeps the last valid address and is explained when the field is left.
   const change = (text: string) => {
-    setOrigin(text);
+    setAddress(text);
     try {
-      setOriginOverride(text);
+      origin.choose(text);
       setError(null);
     } catch {
       // Explained on end editing.
@@ -288,7 +276,7 @@ function Advanced({
   };
   const finish = () => {
     try {
-      setOrigin(setOriginOverride(origin) ?? '');
+      setAddress(origin.choose(address) ?? '');
       setError(null);
       retry();
     } catch (cause) {
@@ -305,10 +293,10 @@ function Advanced({
     >
       <View style={styles.form}>
         <TextInput
-          value={origin}
+          value={address}
           onChangeText={change}
           onEndEditing={finish}
-          placeholder={server ? standardOrigin(server) : HOSTED_ORIGIN}
+          placeholder={origin.standard(server)}
           placeholderTextColor={colors.faint}
           autoCapitalize="none"
           autoCorrect={false}

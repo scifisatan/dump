@@ -2,8 +2,6 @@ import Foundation
 
 public struct ServerLocation: Codable, Equatable, Hashable, Sendable {
   public var baseUrl: String
-  /// The server's notebook identity from /api/ping. A different one at the same address is a
-  /// different notebook.
   public var instanceId: String
 
   public init(baseUrl: String, instanceId: String) {
@@ -14,27 +12,11 @@ public struct ServerLocation: Codable, Equatable, Hashable, Sendable {
   public var host: String { URL(string: baseUrl)?.host ?? baseUrl }
 }
 
-/// One notebook: synced with a server, or (server nil) kept only on this Mac. The same shape as
-/// the web app's profiles (src/core/connection.ts).
 public struct Profile: Codable, Equatable, Identifiable, Sendable {
   public var id: String
   public var server: ServerLocation?
-
-  public init(id: String = UUID().uuidString.lowercased(), server: ServerLocation?) {
-    self.id = id
-    self.server = server
-  }
-
-  // The engine's schema requires `server`, as null for a device-only notebook; synthesized
-  // encoding would leave the key out.
-  public func encode(to encoder: Encoder) throws {
-    var container = encoder.container(keyedBy: CodingKeys.self)
-    try container.encode(id, forKey: .id)
-    try container.encode(server, forKey: .server)
-  }
 }
 
-/// What /api/ping says about a server, checked before anything is saved.
 public struct ServerCheck: Codable, Equatable, Sendable {
   public var baseUrl: String
   public var instanceId: String
@@ -42,11 +24,9 @@ public struct ServerCheck: Codable, Equatable, Sendable {
   public var classify: Bool
 
   public var location: ServerLocation { ServerLocation(baseUrl: baseUrl, instanceId: instanceId) }
-  /// An unconfigured server has no owner key yet and refuses everything but the check.
   public var hasOwnerKey: Bool { auth == "owner-key" }
 }
 
-/// The engine's compact view of the open notebook (mac/engine/index.ts `view`).
 public struct Snapshot: Codable, Equatable, Sendable {
   public enum Sync: String, Codable, Sendable {
     case connecting, syncing, synced, offline, error, local
@@ -57,6 +37,8 @@ public struct Snapshot: Codable, Equatable, Sendable {
     public var id: String
     public var label: String
     public var color: String
+    public var prefix: String
+    public var palette: [String]
   }
 
   public struct Item: Codable, Equatable, Identifiable, Sendable {
@@ -66,24 +48,35 @@ public struct Snapshot: Codable, Equatable, Sendable {
     public var tags: [String]
     public var done: Bool
     public var url: String?
-    /// The day the dump is for, as YYYY-MM-DD in this Mac's time zone (src/shared/due.ts).
     public var due: String?
+    public var dueLabel: String?
+    public var site: String?
+    public var overdue: Bool
     public var createdAt: Double
     public var sorting: Bool
 
     public var created: Date { Date(timeIntervalSince1970: createdAt / 1000) }
   }
 
-  /// How home groups the open dumps (src/shared/due.ts `agenda`), as dump IDs in display order:
-  /// older undated dumps, then Today's sections. Empty unless the snapshot is full.
-  public struct Home: Codable, Equatable, Sendable {
-    public var earlier: [String]
-    public var overdue: [String]
-    public var due: [String]
-    public var upcoming: [String]
-    public var dumped: [String]
+  public struct Section: Codable, Equatable, Identifiable, Sendable {
+    public var id: String
+    public var title: String
+    public var overdue: Bool
+    public var today: Bool
+    public var quiet: Bool
+    public var ids: [String]
+  }
 
-    public static let empty = Home(earlier: [], overdue: [], due: [], upcoming: [], dumped: [])
+  public struct Places: Codable, Equatable, Sendable {
+    public var summary: String
+    public var home: [Section]
+    public var done: [Section]
+    public var lists: [String: [Section]]
+  }
+
+  public struct Days: Codable, Equatable, Sendable {
+    public var today: String
+    public var tomorrow: String
   }
 
   public var ready: Bool
@@ -91,19 +84,31 @@ public struct Snapshot: Codable, Equatable, Sendable {
   public var syncError: String?
   public var saving: Bool
   public var storageError: String?
+  public var attention: Bool
+  public var profile: Profile?
+  public var others: [Profile]
+  public var firstRun: Bool
+  public var openError: String?
+  public var webApp: WebApp
   public var lists: [List]
+  public var palette: [String]
+  public var examples: [String]
+  public var days: Days
   public var recent: [Item]
-  /// Every dump, newest first; only in a full snapshot (`Engine.snapshot(full:)`).
+  public var unfiled: [String]
+  public var doneCount: Int
   public var dumps: [Item]
-  public var home: Home
-  /// Open dumps not filed in a list.
-  public var inbox: Int
+  public var places: Places?
 
   public static let closed = Snapshot(
-    ready: false, sync: .local, syncError: nil, saving: false, storageError: nil, lists: [],
-    recent: [], dumps: [], home: .empty, inbox: 0)
+    ready: false, sync: .local, syncError: nil, saving: false, storageError: nil, attention: false,
+    profile: nil, others: [], firstRun: false, openError: nil,
+    webApp: WebApp(chosen: nil, standard: ""), lists: [], palette: [],
+    examples: [], days: Days(today: "", tomorrow: ""), recent: [], unfiled: [], doneCount: 0,
+    dumps: [], places: nil)
 
   public func list(_ id: String?) -> List? { lists.first { $0.id == id } }
+  public var server: ServerLocation? { profile?.server }
 }
 
 public struct Captured: Codable, Equatable, Sendable {
@@ -112,31 +117,14 @@ public struct Captured: Codable, Equatable, Sendable {
   public var due: String?
 }
 
-/// The Origin header the app sends. Servers answer only the web app origins they list in
-/// ALLOWED_CLIENT_ORIGINS (src/server/origins.ts); the owner key is the authentication.
-public enum ClientOrigin {
-  /// The hosted web app, which every server allows by default.
-  public static let hosted = "https://dump.abishrestha.com.np"
-  /// The web client of `npm run dev`, which the development API allows.
-  public static let development = "http://localhost:6191"
+public struct Day: Codable, Equatable, Sendable {
+  public var due: String
+  public var label: String
+}
 
-  public static func standard(for server: URL) -> String {
-    isLocal(server) ? development : hosted
-  }
+public struct WebApp: Codable, Equatable, Sendable {
+  public var chosen: String?
+  public var standard: String
 
-  public static func isLocal(_ url: URL) -> Bool {
-    ["localhost", "127.0.0.1", "::1", "[::1]"].contains(url.host ?? "")
-  }
-
-  /// A valid override is an http(s) origin with nothing after the host and port.
-  public static func normalized(_ input: String) -> String? {
-    let trimmed = input.trimmingCharacters(in: .whitespacesAndNewlines)
-    guard let url = URL(string: trimmed), let scheme = url.scheme?.lowercased(),
-      scheme == "https" || scheme == "http", let host = url.host, !host.isEmpty,
-      url.path.isEmpty || url.path == "/", url.query == nil, url.fragment == nil, url.user == nil
-    else { return nil }
-    let port = url.port.map { ":\($0)" } ?? ""
-    let bracketed = host.contains(":") && !host.hasPrefix("[") ? "[\(host)]" : host
-    return "\(scheme)://\(bracketed.lowercased())\(port)"
-  }
+  public var current: String { chosen ?? standard }
 }

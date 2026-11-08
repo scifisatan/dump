@@ -9,6 +9,10 @@ export const LISTS = [
   { id: 'todo', label: 'To do', color: '#cd7f86' },
 ] as const;
 
+export const LIST_COLORS = [...LISTS.map((list) => list.color), '#849299'];
+export const paletteFor = (color: string) =>
+  LIST_COLORS.includes(color.toLowerCase()) ? LIST_COLORS : [...LIST_COLORS, color.toLowerCase()];
+
 export const listSchema = z.string().regex(/^[a-z0-9][a-z0-9-]{0,63}$/);
 export type ListId = z.infer<typeof listSchema>;
 
@@ -73,21 +77,18 @@ export const exportSchema = z.object({
   lists: z.array(collectionSchema).max(500),
 });
 
-// The list a leading `!list` names (by ID, or by label with hyphens for spaces), and the length
-// of that prefix; null when there is no prefix or it names no list.
+const listSlug = (label: string) => label.toLowerCase().split(/\s+/).join('-');
+export const prefixFor = (list: Pick<Collection, 'label'>) => `!${listSlug(list.label)}`;
+
 export function listPrefix(raw: string, lists: Collection[] = DEFAULT_LISTS) {
   const prefix = raw.trim().match(/^!([a-z0-9-]+)(?:\s+|$)/i);
   const name = prefix?.[1].toLowerCase();
   const list = lists.find(
-    (item) =>
-      !item.deleted && (item.id === name || item.label.toLowerCase().replace(/\s+/g, '-') === name),
+    (item) => !item.deleted && (item.id === name || listSlug(item.label) === name),
   );
   return prefix && list ? { list: list.id, length: prefix[0].length } : null;
 }
 
-// `chosen` is the list the owner is capturing into; a `!list` prefix wins over it. A chosen list
-// that no longer exists is ignored, so the thought is still captured, unfiled. `due` is the day
-// the owner settled on while typing (null for none); left out, it is read from the text.
 export function makeDump(
   raw: string,
   id = crypto.randomUUID(),

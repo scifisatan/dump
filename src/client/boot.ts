@@ -1,12 +1,9 @@
 // The loading screen (#boot in index.html) covers the page from first paint, before any script
-// runs. Whatever is still loading holds it; when the last hold is released it fades out. It only
-// appears after DELAY and then stays at least MIN_VISIBLE, so fast loads show nothing and slow
-// ones never flicker.
+// runs.
 const DELAY = 200; // matches #boot's animation-delay in index.html
 const MIN_VISIBLE = 500;
 
 const screen = () => document.getElementById('boot');
-// The page load itself is the first hold, released after React's first commit.
 let holds = 1;
 let visibleFrom = DELAY;
 let pending: ReturnType<typeof setTimeout> | undefined;
@@ -45,14 +42,12 @@ function holder() {
     if (released) return;
     released = true;
     holds--;
-    // Wait a frame: whatever replaces the released content may take its own hold.
     requestAnimationFrame(settle);
   };
 }
 
 export const releasePageLoad = holder();
 
-// Returns the release function, so it can be a layout effect's cleanup.
 export function holdBoot() {
   holds++;
   clearTimeout(pending);
@@ -64,7 +59,6 @@ export function holdBoot() {
   return holder();
 }
 
-// An error screen must not stay covered.
 export function dismissBoot() {
   holds = 0;
   clearTimeout(pending);

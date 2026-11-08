@@ -20,17 +20,29 @@ import {
   Trash2,
   X,
 } from 'lucide-react';
-import { format, isToday, isYesterday, startOfDay } from 'date-fns';
 import { toast } from 'sonner';
 import { Link, useLocation, useNavigate, useMatch } from 'react-router-dom';
-import { agenda, parseDue } from '../shared/due';
-import type { Collection, Dump } from '../shared/schema';
-import { client, exportDumps, useDumpStore } from './store';
+import {
+  byDay,
+  DAY_EXAMPLES,
+  dayLabel,
+  dueLabel,
+  dumpsIn,
+  home,
+  longDate,
+  needsAttention,
+  notebook,
+  placeOf,
+  type Place,
+} from '../core/views';
+import { parseDue } from '../shared/due';
+import { prefixFor, type Collection, type Dump } from '../shared/schema';
+import { client, exportDumps, session, useDumpStore } from './store';
 import { cn } from './lib/utils';
 import { useVisualViewport } from './lib/viewport';
 import { Brand } from './components/Brand';
 import { DumpCard, type DumpActions } from './components/DumpCard';
-import { DraftDue, dueLabel } from './components/DueDate';
+import { DraftDue } from './components/DueDate';
 import { ListDot } from './components/ListDot';
 import { ListEditor } from './components/ListEditor';
 import { SearchDialog } from './components/SearchDialog';
@@ -40,34 +52,11 @@ import { TriageDialog } from './components/TriageDialog';
 import { Button } from './components/ui/button';
 
 const column = 'mx-auto w-full max-w-190 px-10 max-tablet:px-7 max-phone:px-3.5';
-// The composer is the main action, so it carries a lime-tinted edge and a lifted shadow.
 const composer =
   'border border-ring/50 bg-capture shadow-capture focus-within:border-ring focus-within:ring-4 focus-within:ring-ring/15';
 const hint = 'rounded-[3px] bg-secondary px-1 py-0.5 [font:inherit]';
-// Shown in an empty Today; each fills the composer, and its day shows before it is saved.
-const DAY_EXAMPLES = ['Call the bank tomorrow', 'Pay rent by friday', 'Book the dentist in 3 days'];
-
-function dayLabel(time: number) {
-  if (isToday(time)) return 'Today';
-  if (isYesterday(time)) return 'Yesterday';
-  return format(
-    time,
-    new Date(time).getFullYear() === new Date().getFullYear() ? 'EEEE, MMMM d' : 'EEEE, MMMM d, y',
-  );
-}
-// Dumps arrive oldest first, so each day's group is contiguous.
-function byDay(dumps: Dump[]) {
-  const days: { day: number; dumps: Dump[] }[] = [];
-  for (const dump of dumps) {
-    const day = startOfDay(dump.created_at).getTime();
-    const last = days.at(-1);
-    if (last?.day === day) last.dumps.push(dump);
-    else days.push({ day, dumps: [dump] });
-  }
-  return days;
-}
-
-const homeOf = (dump: Dump) => (dump.done ? '/done' : dump.list ? `/lists/${dump.list}` : '/');
+const pathOf = (place: Place) =>
+  place.kind === 'done' ? '/done' : place.kind === 'list' ? `/lists/${place.id}` : '/';
 
 export default function App() {
   const state = useDumpStore();
@@ -75,7 +64,6 @@ export default function App() {
   const location = useLocation();
   const listMatch = useMatch('/lists/:id');
   const [draft, setDraft] = useState('');
-  // The day read from the draft that the owner chose not to use.
   const [skippedDue, setSkippedDue] = useState<string | null>(null);
   const [fatal, setFatal] = useState('');
   const [searchOpen, setSearchOpen] = useState(false);
@@ -83,7 +71,6 @@ export default function App() {
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [triage, setTriage] = useState(false);
   const [editor, setEditor] = useState<{ list?: Collection } | null>(null);
-  // Clearing is final, so the first click only arms the button.
   const [confirmClear, setConfirmClear] = useState(false);
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -92,69 +79,43 @@ export default function App() {
   const contentRef = useRef<HTMLDivElement>(null);
   const todayRef = useRef<HTMLElement>(null);
   const atBottom = useRef(true);
-  // True while home is held at Today's heading: the bottom is followed again only once reached.
   const atToday = useRef(false);
   useVisualViewport();
-  const lists = state.lists.filter((list) => !list.deleted);
-  const active = state.dumps.filter((dump) => !dump.deleted);
-  // Home shows every open dump with its list; `unfiled` only feeds Sort inbox, and leaves out
-  // dumps Jev is still sorting so the button does not flash after each capture.
-  const open = active.filter((dump) => !dump.done);
-  const unfiled = open.filter((dump) => dump.list === null && !state.sorting.has(dump.id));
-  const completed = active.filter((dump) => dump.done);
-  const currentList = lists.find((list) => list.id === listMatch?.params.id);
+  const now = Date.now();
+  const book = notebook(state);
+  const { lists, unfiled, done: completed } = book;
+  const currentList = book.list(listMatch?.params.id ?? null);
   const done = location.pathname === '/done';
-  // Home is the one list of every open dump, so a path that names no view shows it.
   const isHome = !done && !currentList;
   const title = done ? 'Done' : (currentList?.label ?? 'Your space');
   const selectedId = new URLSearchParams(location.search).get('item');
-  // Home: older undated dumps by day, then Today just above the composer.
-  const plan = agenda(open, Date.now());
-  const overdue = plan.overdue;
-  const dueToday = plan.due;
-  const todayGroups = [
-    { key: 'overdue', label: 'Overdue', dumps: plan.overdue },
-    { key: 'due', label: 'Due today', dumps: plan.due },
-    { key: 'upcoming', label: 'Coming up', dumps: plan.upcoming },
-    { key: 'dumped', label: 'Dumped today', dumps: plan.dumped },
-  ].filter((group) => group.dumps.length > 0);
+  const plan = home(book, now);
+  const todayGroups = plan.sections;
   const showToday = isHome && !selectedId;
   const history = showToday ? plan.earlier : [];
-  // Newest dumps sit at the bottom, next to the composer, like a chat.
+  const place: Place = done
+    ? { kind: 'done' }
+    : currentList
+      ? { kind: 'list', id: currentList.id }
+      : { kind: 'home' };
   const selected = showToday
     ? [...history, ...todayGroups.flatMap((group) => group.dumps)]
-    : active
-        .filter((dump) =>
-          selectedId
-            ? dump.id === selectedId
-            : done
-              ? dump.done
-              : currentList
-                ? dump.list === currentList.id && !dump.done
-                : !dump.done,
-        )
+    : (selectedId ? book.dumps.filter((dump) => dump.id === selectedId) : dumpsIn(place, book))
+        .slice()
         .reverse();
   const groups = byDay(showToday ? history : selected).map(({ day, dumps }) => ({
-    key: String(day),
-    label: dayLabel(day),
+    key: day,
+    label: dayLabel(day, now),
     dumps,
   }));
-  const draftDue = parseDue(draft, Date.now());
+  const draftDue = parseDue(draft, now);
   const shownDue = draftDue === skippedDue ? null : draftDue;
-  // An empty list or Done centers a larger composer; home always ends in Today, so it pins it.
   const empty = state.ready && selected.length === 0 && !showToday;
-  // Done is a record of finished dumps, not a place to capture new ones.
   const composing = !done;
 
   useEffect(() => {
-    void client
-      .start()
-      .catch((error) =>
-        setFatal(error instanceof Error ? error.message : 'Could not open local storage.'),
-      );
+    void session.get().ready.then(() => setFatal(session.get().openError ?? ''));
   }, []);
-  // Keep the loading screen up until this device's notes are loaded, so the empty inbox never
-  // flashes before them.
   useLayoutEffect(() => (state.ready || fatal ? undefined : holdBoot()), [state.ready, fatal]);
   useEffect(() => {
     if (state.ready && window.matchMedia('(pointer:fine)').matches) inputRef.current?.focus();
@@ -179,7 +140,6 @@ export default function App() {
     window.addEventListener('keydown', shortcut);
     return () => window.removeEventListener('keydown', shortcut);
   }, []);
-  // Open each view at its newest dump; follow new dumps only when they are added.
   useLayoutEffect(() => {
     shownCount.current = 0;
     atBottom.current = true;
@@ -189,8 +149,6 @@ export default function App() {
     const scroller = scrollRef.current;
     const count = state.ready ? selected.length : 0;
     if (scroller && count > shownCount.current) {
-      // Home opens with Today's heading at the top when Today is taller than the screen, so
-      // overdue dumps are in view; otherwise the browser stops at the bottom.
       const bottom = scroller.scrollHeight - scroller.clientHeight;
       const today = shownCount.current === 0 ? todayRef.current : null;
       const top = today
@@ -221,7 +179,6 @@ export default function App() {
     observer.observe(content);
     return () => observer.disconnect();
   }, []);
-  // Grow the composer with its text, up to the max height set in its classes.
   useLayoutEffect(() => {
     const input = inputRef.current;
     if (!input) return;
@@ -246,13 +203,14 @@ export default function App() {
       ),
     remove: (dump) => act(() => client.remove(dump.id), 'Dump removed'),
     due: (dump, due) =>
-      act(() => client.setDue(dump.id, due), due ? `Moved to ${dueLabel(due)}` : 'Date cleared'),
+      act(
+        () => client.setDue(dump.id, due),
+        due ? `Moved to ${dueLabel(due, Date.now())}` : 'Date cleared',
+      ),
     file: (dump, list) =>
       act(
         () => client.file(dump.id, list),
-        list
-          ? `Filed in ${lists.find((item) => item.id === list)?.label ?? 'your list'}`
-          : 'Moved to inbox',
+        list ? `Filed in ${book.list(list)?.label ?? 'your list'}` : 'Moved to inbox',
       ),
     openList: (list) => navigate(`/lists/${list}`),
     tag: (tag) => {
@@ -264,14 +222,12 @@ export default function App() {
     event?.preventDefault();
     if (!draft.trim() || !state.ready) return;
     try {
-      // A list's composer files into that list; a `!list` prefix still wins. The dump gets the
-      // day the composer showed.
       const dump = client.capture(draft, currentList?.id ?? null, shownDue);
       setDraft('');
       setSkippedDue(null);
       refocus.current = true;
       if (dump.list && dump.list !== currentList?.id)
-        toast(`Captured in ${lists.find((list) => list.id === dump.list)?.label ?? 'your list'}`);
+        toast(`Captured in ${book.list(dump.list)?.label ?? 'your list'}`);
       else if (!dump.list && currentList) toast('Captured in your inbox');
     } catch (error) {
       toast.error(error instanceof Error ? error.message : 'Could not capture this dump.');
@@ -281,12 +237,7 @@ export default function App() {
     setSearchQuery('');
     setSearchOpen(true);
   }
-  // Sync shows only when it needs attention: offline, paused, signed out or unable to save.
-  const syncProblem =
-    !!state.storageError ||
-    state.sync === 'offline' ||
-    state.sync === 'error' ||
-    state.sync === 'signed-out';
+  const syncProblem = needsAttention(state);
   const syncText = state.storageError
     ? 'Storage needs attention'
     : state.saving
@@ -320,8 +271,6 @@ export default function App() {
       }
     },
   };
-  // Screen readers always hear the sync state; it shows beside Settings only when it needs
-  // attention, and the gear carries a dot.
   const status = syncProblem ? (
     <span
       className="flex h-8 min-w-0 shrink items-center gap-1.5 rounded-full bg-destructive/10 px-2.5 text-[11px] text-destructive"
@@ -347,7 +296,12 @@ export default function App() {
   );
 
   function dumpGroup(
-    { key, label, dumps }: { key: string; label: string; dumps: Dump[] },
+    {
+      key,
+      label,
+      dumps,
+      overdue,
+    }: { key: string; label: string; dumps: Dump[]; overdue?: boolean },
     Heading: 'h2' | 'h3',
   ) {
     return (
@@ -355,7 +309,7 @@ export default function App() {
         <Heading
           className={cn(
             'mb-2 px-1 text-[9px] tracking-[1.3px] uppercase',
-            key === 'overdue' ? 'text-destructive' : 'text-muted-foreground',
+            overdue ? 'text-destructive' : 'text-muted-foreground',
           )}
         >
           {label}
@@ -543,7 +497,7 @@ export default function App() {
             ) : empty ? (
               <div className="mx-auto w-full max-w-160 pb-[8vh] text-center max-phone:pb-0">
                 <div className="mb-5 text-[10px] tracking-[1.8px] text-muted-foreground uppercase">
-                  {format(new Date(), 'EEEE, MMMM d')}
+                  {longDate(now)}
                 </div>
                 <div className="mx-auto mb-3.75 grid size-14 place-items-center rounded-[18px] bg-secondary text-accent-foreground">
                   {done ? (
@@ -565,7 +519,7 @@ export default function App() {
                   {done
                     ? 'Check off a thought when you’re finished with it.'
                     : currentList
-                      ? `Dump something here, or type !${currentList.label.toLowerCase()} anywhere.`
+                      ? `Dump something here, or type ${prefixFor(currentList)} anywhere.`
                       : 'Drop a thought, a link, or that thing you don’t want to forget. Give it a day, like “by friday”, and it waits for you in Today.'}
                 </p>
                 {composing && (
@@ -618,10 +572,13 @@ export default function App() {
                 {!selectedId && !showToday && (
                   <div className="flex flex-1 flex-col items-center justify-center py-14 text-center max-phone:py-10">
                     <div className="text-[10px] tracking-[1.8px] text-muted-foreground uppercase">
-                      {format(new Date(), 'EEEE')}
+                      {new Date(now).toLocaleDateString(undefined, { weekday: 'long' })}
                     </div>
                     <div className="mt-1.5 text-[44px] leading-none font-[600] tracking-[-1.8px] max-phone:text-[36px]">
-                      {format(new Date(), 'MMMM d')}
+                      {new Date(now).toLocaleDateString(undefined, {
+                        month: 'long',
+                        day: 'numeric',
+                      })}
                     </div>
                     <p className="mt-3 text-[12px] text-muted-foreground">
                       {done
@@ -640,14 +597,10 @@ export default function App() {
                     >
                       <div className="px-1">
                         <h2 className="text-[17px] font-[600] tracking-[-0.4px]">Today</h2>
-                        <p className="mt-0.5 text-[12px] text-muted-foreground">
-                          {format(new Date(), 'EEEE, MMMM d')}
-                          {todayGroups.length > 0 &&
-                            ` · ${overdue.length > 0 ? `${overdue.length} overdue · ` : ''}${dueToday.length || 'Nothing'} due today`}
-                        </p>
+                        <p className="mt-0.5 text-[12px] text-muted-foreground">{plan.heading}</p>
                       </div>
                       {todayGroups.map((group) => dumpGroup(group, 'h3'))}
-                      {todayGroups.length === 0 && (
+                      {plan.quiet && (
                         <div className="rounded-[12px] border border-dashed px-5 py-6 text-center max-phone:px-4">
                           <p className="text-[15px] font-[550] tracking-[-0.2px]">A clear day.</p>
                           <p className="mx-auto mt-1 max-w-84 text-[12px] leading-[1.7] text-muted-foreground">
@@ -721,10 +674,9 @@ export default function App() {
         onOpenChange={setSearchOpen}
         initialQuery={searchQuery}
         onQueryChange={setSearchQuery}
-        dumps={active}
-        lists={lists}
+        book={book}
         navigate={navigate}
-        select={(dump) => navigate(`${homeOf(dump)}?item=${dump.id}`)}
+        select={(dump) => navigate(`${pathOf(placeOf(dump))}?item=${dump.id}`)}
         settings={() => setSettingsOpen(true)}
         newList={() => setEditor({})}
       />

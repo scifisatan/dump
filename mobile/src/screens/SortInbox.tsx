@@ -6,16 +6,14 @@ import { failed } from '../DumpRow';
 import { useSession, useSnapshot } from '../notebook';
 import { useColors } from '../theme';
 import { Button, ListDot } from '../ui';
-import { notebook, unfiled } from '../views';
+import { notebook } from '../../../src/core/views';
 
-// Sort inbox, as on the web (TriageDialog.tsx): one unfiled dump at a time. Dumps Jev is still
-// sorting are left to it.
 export function SortInbox({ navigation }: ScreenProps<'SortInbox'>) {
   const { client } = useSession();
   const book = notebook(useSnapshot());
   const colors = useColors();
   const [skipped, setSkipped] = useState(0);
-  const queue = unfiled(book);
+  const queue = book.unfiled;
   const current = queue.length > 0 ? queue[skipped % queue.length] : undefined;
 
   useLayoutEffect(() => {

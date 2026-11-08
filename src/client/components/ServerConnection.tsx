@@ -1,13 +1,6 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { Check, LoaderCircle } from 'lucide-react';
-import {
-  explainConnectionError,
-  inspectServer,
-  requestTicket,
-  serverUrl,
-  type ServerLocation,
-} from '../../core/connection';
-import type { PingResult } from '../../shared/api';
+import { checkServer, type ServerCheck, type ServerLocation } from '../../core/connection';
 import { Button } from './ui/button';
 import { Input } from './ui/input';
 
@@ -16,8 +9,6 @@ import { Input } from './ui/input';
 const DEV_SERVER = import.meta.env.DEV ? 'http://localhost:6190' : '';
 const DEV_KEY = import.meta.env.DEV ? 'dump-local-development-owner-key' : '';
 
-// Finds a Dump server, then checks its owner key before anything is saved. Used for first-run
-// setup, switching servers, and connecting a device-only notebook.
 export function ServerConnection({
   action = 'Connect to this server',
   notice,
@@ -25,17 +16,17 @@ export function ServerConnection({
 }: {
   action?: string;
   notice?: ReactNode;
-  onConnect: (server: ServerLocation, key: string) => Promise<void>;
+  onConnect: (server: ServerLocation, key: string, signal: AbortSignal) => Promise<void>;
 }) {
   const [address, setAddress] = useState(DEV_SERVER);
   const [key, setKey] = useState(DEV_KEY);
-  const [checked, setChecked] = useState<{ server: ServerLocation; info: PingResult } | null>(null);
+  const [checked, setChecked] = useState<ServerCheck | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const request = useRef<AbortController | null>(null);
   useEffect(() => () => request.current?.abort(), []);
 
-  async function run(task: (signal: AbortSignal) => Promise<void>, fallback: string) {
+  async function run(task: (signal: AbortSignal) => Promise<void>) {
     setError('');
     setBusy(true);
     request.current?.abort();
@@ -44,7 +35,8 @@ export function ServerConnection({
     try {
       await task(controller.signal);
     } catch (cause) {
-      if (!controller.signal.aborted) setError(explainConnectionError(cause, fallback));
+      if (!controller.signal.aborted)
+        setError(cause instanceof Error ? cause.message : 'Could not connect to this server.');
     } finally {
       if (!controller.signal.aborted) setBusy(false);
     }
@@ -53,18 +45,13 @@ export function ServerConnection({
   const check = () =>
     run(async (signal) => {
       setChecked(null);
-      const baseUrl = serverUrl(address);
-      const info = await inspectServer(baseUrl, signal);
-      signal.throwIfAborted();
-      setChecked({ server: { baseUrl, instanceId: info.instanceId }, info });
-    }, 'Could not check this server.');
+      setChecked(await checkServer(address, signal));
+    });
 
-  const connect = (server: ServerLocation) =>
+  const connect = (server: ServerCheck) =>
     run(async (signal) => {
-      await requestTicket(server.baseUrl, key, signal);
-      signal.throwIfAborted();
-      await onConnect(server, key);
-    }, 'Could not connect to this server.');
+      await onConnect(server, key, signal);
+    });
 
   return (
     <div className="space-y-3">
@@ -107,9 +94,9 @@ export function ServerConnection({
             <Check size={15} />
             Dump server found
           </p>
-          <p className="break-all text-muted-foreground">{checked.server.baseUrl}</p>
-          <p>Automatic filing {checked.info.classify ? 'available' : 'off'}</p>
-          {checked.info.auth === 'unconfigured' ? (
+          <p className="break-all text-muted-foreground">{checked.baseUrl}</p>
+          <p>Automatic filing {checked.classify ? 'available' : 'off'}</p>
+          {checked.auth === 'unconfigured' ? (
             <p className="leading-relaxed text-destructive">
               This server has no owner key yet. Set <code>OWNER_KEY</code> on it, redeploy, then
               check again.
@@ -119,7 +106,7 @@ export function ServerConnection({
               className="space-y-2"
               onSubmit={(event) => {
                 event.preventDefault();
-                void connect(checked.server);
+                void connect(checked);
               }}
             >
               {/* Lets password managers save one key per server. */}
@@ -127,7 +114,7 @@ export function ServerConnection({
                 type="text"
                 name="username"
                 autoComplete="username"
-                value={checked.server.baseUrl}
+                value={checked.baseUrl}
                 readOnly
                 tabIndex={-1}
                 aria-hidden="true"

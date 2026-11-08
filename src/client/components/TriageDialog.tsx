@@ -30,7 +30,6 @@ export function TriageDialog({
       )
         return;
       if (!current) return;
-      // 1–9 pick the first nine lists in sidebar order; every list also has a button.
       const list = /^[1-9]$/.test(event.key) ? lists[Number(event.key) - 1] : undefined;
       if (list) {
         event.preventDefault();

@@ -13,7 +13,6 @@ export const classifyRequestSchema = z
     text: z.string().trim().min(1).max(CLASSIFY_TEXT_LIMIT),
     lists: z
       .array(z.object({ id: listSchema, label: z.string().trim().min(1).max(40) }).strict())
-      // Jev is only asked when there is a real choice between lists.
       .min(2)
       .max(500),
   })

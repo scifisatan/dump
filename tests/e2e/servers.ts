@@ -6,7 +6,6 @@ export const PEER = 'http://localhost:6193';
 // Matches tests/e2e/server.env.
 export const OWNER_KEY = 'e2e-owner-key-for-local-tests-only';
 
-// Opens a list from search, which lists every list.
 export async function openList(page: Page, label: string) {
   await page.getByRole('button', { name: 'Search your space' }).click();
   await page.getByRole('option', { name: label, exact: true }).click({ timeout: 20_000 });
@@ -17,7 +16,6 @@ export async function capture(page: Page, text: string) {
   await page.getByRole('button', { name: 'Save dump', exact: true }).click();
 }
 
-// Fills the server form used by onboarding and Settings, then submits it with `action`.
 export async function connectServer(
   page: Page,
   address: string,
@@ -36,7 +34,6 @@ export async function startOnboarding(page: Page) {
   await page.getByRole('button', { name: 'Get started' }).first().click();
 }
 
-// A new visitor connects a server from the landing page and lands in the notebook.
 export async function onboard(page: Page, address = HOME) {
   await startOnboarding(page);
   await page.getByRole('button', { name: /Sync with your server/ }).click();

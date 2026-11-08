@@ -4,8 +4,8 @@ Owns `src/client/`, `index.html`, `public/` and `wrangler.client.jsonc`. For wha
 
 ## Stack and entry points
 
-- React with React Router, Tailwind v4 (tokens and custom variants in `src/client/styles.css`), shadcn/Radix primitives in `components/ui/`, cmdk search, next-themes (Light, Dark, System), lucide-react, sonner, date-fns, vite-plugin-pwa. Vite builds the client to `dist/client/`.
-- `main.tsx` picks the screen and lazy-loads `App.tsx` (the notebook) or `Marketing.tsx` (the landing page). `store.ts` creates the one client for the active profile and exposes `useDumpStore`. `browser-platform.ts` is the browser adapter: IndexedDB, WebSocket, BroadcastChannel and device events. `profiles.ts` holds saved notebooks and owner keys. `registry.ts` answers whether this browser has a notebook.
+- React with React Router, Tailwind v4 (tokens and custom variants in `src/client/styles.css`), shadcn/Radix primitives in `components/ui/`, cmdk search, next-themes (Light, Dark, System), lucide-react, sonner, vite-plugin-pwa. Vite builds the client to `dist/client/`.
+- `main.tsx` picks the screen and lazy-loads `App.tsx` (the notebook) or `Marketing.tsx` (the landing page). `store.ts` runs the core's session for the active profile, whose switches reload the page, and exposes `useDumpStore`. `browser-platform.ts` is the browser adapter: IndexedDB, WebSocket, BroadcastChannel and device events. `profiles.ts` keeps the core's notebook registry and the owner keys in localStorage. `registry.ts` answers whether this browser has a notebook.
 - `App.tsx` is large (about 770 lines): the shell, top bar, views and composer are all in it. Grep for the piece you need instead of reading the whole file.
 
 ## Views and look
@@ -47,4 +47,4 @@ The static host sends a CSP from `public/_headers` that allows only the app's ow
 
 ## Known risk
 
-Every render repeats filters and counts over all dumps, and search mounts every candidate. See [core.md § Known risk](core.md#known-risk-capture-cost-grows-with-the-data).
+The views split the dumps once per snapshot, but search mounts every candidate. See [core.md § Known risk](core.md#known-risk-capture-cost-grows-with-the-data).
