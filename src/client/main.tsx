@@ -1,34 +1,32 @@
-import React, { lazy, Suspense, useLayoutEffect, useSyncExternalStore } from 'react';
+// First: styles.css declares the cascade-layer order every later stylesheet lands in.
+import './styles.css';
+import React, { lazy, Suspense, useLayoutEffect } from 'react';
 import ReactDOM from 'react-dom/client';
 import { registerSW } from 'virtual:pwa-register';
-import { Toaster, toast } from 'sonner';
-import { ThemeProvider, useTheme } from 'next-themes';
 import { BrowserRouter, Route, Routes } from 'react-router-dom';
-import '@fontsource-variable/geist';
+import { AppShell } from '@astryxdesign/core/AppShell';
+import { Button } from '@astryxdesign/core/Button';
+import { EmptyState } from '@astryxdesign/core/EmptyState';
+import { LayerProvider } from '@astryxdesign/core/Layer';
+import { LinkProvider } from '@astryxdesign/core/Link';
+import { Theme } from '@astryxdesign/core/theme';
 import { dismissBoot, holdBoot, releasePageLoad } from './boot';
+import { RouterLink } from './components/RouterLink';
+import { useColorMode } from './lib/colorMode';
+import { toast, ToastBridge } from './lib/toast';
 import { hasNotebook } from './registry';
-import './styles.css';
+import { themes, defaultThemeSlug } from '../astryx-themes';
 
 const App = lazy(() => import('./App'));
 const Marketing = lazy(() => import('./Marketing'));
-// Matches Tailwind's `phone` breakpoint (47.5rem).
-const phoneQuery = window.matchMedia('(max-width: 47.4375rem)');
-const subscribePhone = (listener: () => void) => {
-  phoneQuery.addEventListener('change', listener);
-  return () => phoneQuery.removeEventListener('change', listener);
-};
-function Notifications() {
-  const { resolvedTheme } = useTheme();
-  const phone = useSyncExternalStore(subscribePhone, () => phoneQuery.matches);
+
+// Settings' Light / Dark / System choice drives the Astryx theme.
+function AstryxTheme({ children }: React.PropsWithChildren) {
+  const { resolved } = useColorMode();
   return (
-    <Toaster
-      position={phone ? 'top-center' : 'top-right'}
-      offset={{ top: 76, right: 24 }}
-      mobileOffset={{ top: 64, left: 12, right: 12 }}
-      theme={resolvedTheme === 'dark' ? 'dark' : 'light'}
-      closeButton
-      richColors
-    />
+    <Theme theme={themes[defaultThemeSlug]} mode={resolved}>
+      {children}
+    </Theme>
   );
 }
 
@@ -52,11 +50,14 @@ class ErrorBoundary extends React.Component<React.PropsWithChildren, { error: bo
   render() {
     if (this.state.error)
       return (
-        <main className="grid min-h-dvh place-content-center gap-5 text-center text-muted-foreground">
-          <h1>Let’s reopen your space.</h1>
-          <p>The page ran into a problem. Your saved dumps are still in this browser.</p>
-          <button onClick={() => location.reload()}>Reload Dump</button>
-        </main>
+        <AppShell mobileNav={false}>
+          <EmptyState
+            headingLevel={1}
+            title="Let’s reopen your space."
+            description="The page ran into a problem. Your saved dumps are still in this browser."
+            actions={<Button label="Reload Dump" onClick={() => location.reload()} />}
+          />
+        </AppShell>
       );
     return this.props.children;
   }
@@ -64,32 +65,31 @@ class ErrorBoundary extends React.Component<React.PropsWithChildren, { error: bo
 
 ReactDOM.createRoot(document.getElementById('root')!).render(
   <React.StrictMode>
-    <ThemeProvider
-      attribute="class"
-      defaultTheme="light"
-      enableSystem
-      storageKey="dump-theme"
-      disableTransitionOnChange
-    >
-      <ErrorBoundary>
-        <BrowserRouter>
-          <Suspense fallback={<Loading />}>
-            <Routes>
-              <Route path="/marketing" element={<Marketing />} />
-              <Route path="*" element={hasNotebook() ? <App /> : <Marketing />} />
-            </Routes>
-          </Suspense>
-        </BrowserRouter>
-        <Notifications />
-        <FirstCommit />
-      </ErrorBoundary>
-    </ThemeProvider>
+    <AstryxTheme>
+      {/* Toasts sit at the top end, below the top bar. */}
+      <LayerProvider toast={{ position: 'topEnd', inset: { top: 64 } }}>
+        <ErrorBoundary>
+          <BrowserRouter>
+            <LinkProvider component={RouterLink}>
+              <Suspense fallback={<Loading />}>
+                <Routes>
+                  <Route path="/marketing" element={<Marketing />} />
+                  <Route path="*" element={hasNotebook() ? <App /> : <Marketing />} />
+                </Routes>
+              </Suspense>
+            </LinkProvider>
+          </BrowserRouter>
+          <ToastBridge />
+          <FirstCommit />
+        </ErrorBoundary>
+      </LayerProvider>
+    </AstryxTheme>
   </React.StrictMode>,
 );
 const update = registerSW({
   onNeedRefresh() {
     toast('A new version of Dump is ready.', {
-      duration: Infinity,
+      persistent: true,
       action: { label: 'Reload', onClick: () => void update(true) },
     });
   },

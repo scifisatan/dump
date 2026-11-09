@@ -1,5 +1,6 @@
 // Applies the saved theme before first paint, so the loading screen and the app never flash the
-// wrong colors. next-themes (storageKey `dump-theme`, default light) takes over once React runs.
+// wrong colors. src/client/lib/colorMode.ts (same `dump-theme` key, default light) takes over once
+// React runs.
 // An external file because the Content-Security-Policy allows no inline scripts.
 try {
   const saved = localStorage.getItem('dump-theme') || 'light';

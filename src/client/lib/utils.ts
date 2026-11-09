@@ -1,6 +1,3 @@
-import { clsx, type ClassValue } from 'clsx';
-import { twMerge } from 'tailwind-merge';
-
-export function cn(...inputs: ClassValue[]) {
-  return twMerge(clsx(inputs));
-}
+// Joins class names, skipping falsy ones. Classes never override each other here: a component
+// that needs a variant takes a prop for it.
+export { clsx as cn } from 'clsx';

@@ -1,84 +1,20 @@
+/* Astryx layers sit between Tailwind's base and utilities, so utilities and className still win. */
+@layer reset, theme, base, astryx-base, astryx-theme, components, utilities;
 @import 'tailwindcss';
-@import 'tw-animate-css';
-@custom-variant dark (&:is(.dark *));
+@import '@astryxdesign/core/reset.css';
+@import '@astryxdesign/core/astryx.css';
+/* Maps utilities such as text-primary, bg-muted and bg-accent-bg to the active theme's tokens. */
+@import '@astryxdesign/core/tailwind-theme.css';
 @custom-variant keyboard (&:is([data-keyboard] *));
 
-:root {
-  --background: #f7f7f5;
-  --foreground: #30332b;
-  --card: #fff;
-  --card-foreground: var(--foreground);
-  --popover: #fff;
-  --popover-foreground: var(--foreground);
-  --primary: #d8ee79;
-  --primary-foreground: #30332b;
-  --secondary: #edf2db;
-  --secondary-foreground: #526124;
-  --muted: #f0f1ed;
-  --muted-foreground: #767970;
-  --accent: #edf2db;
-  --accent-foreground: #526124;
-  --destructive: #b84f63;
-  --border: #e5e7df;
-  --input: #daddd2;
-  --ring: #98ac59;
-  --sidebar: #fcfcfa;
-  --capture: #fff;
-  --soft-shadow: 0 3px 12px #30332b05;
-  --capture-shadow: 0 1px 2px #30332b0f, 0 10px 28px #30332b17;
-  --radius: 0.65rem;
-}
-.dark {
-  --background: #191b17;
-  --foreground: #e3e7da;
-  --card: #23261f;
-  --card-foreground: var(--foreground);
-  --popover: #2b2f25;
-  --popover-foreground: var(--foreground);
-  --primary: #d8ee79;
-  --primary-foreground: #30332b;
-  --secondary: #343d23;
-  --secondary-foreground: #d8ee79;
-  --muted: #2b2f25;
-  --muted-foreground: #a0a792;
-  --accent: #343d23;
-  --accent-foreground: #d8ee79;
-  --destructive: #f293a5;
-  --border: #363d2e;
-  --input: #47503b;
-  --ring: #afc365;
-  --sidebar: #1d201a;
-  --capture: #23261f;
-  --soft-shadow: 0 3px 16px #0000000a;
-  --capture-shadow: 0 1px 2px #0000004d, 0 10px 32px #00000066;
-}
-@theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --color-card: var(--card);
-  --color-card-foreground: var(--card-foreground);
-  --color-popover: var(--popover);
-  --color-popover-foreground: var(--popover-foreground);
-  --color-primary: var(--primary);
-  --color-primary-foreground: var(--primary-foreground);
-  --color-secondary: var(--secondary);
-  --color-secondary-foreground: var(--secondary-foreground);
-  --color-muted: var(--muted);
-  --color-muted-foreground: var(--muted-foreground);
-  --color-accent: var(--accent);
-  --color-accent-foreground: var(--accent-foreground);
-  --color-destructive: var(--destructive);
-  --color-border: var(--border);
-  --color-input: var(--input);
-  --color-ring: var(--ring);
-  --radius-sm: calc(var(--radius) - 4px);
-  --radius-md: calc(var(--radius) - 2px);
-  --radius-lg: var(--radius);
-  --radius-xl: calc(var(--radius) + 4px);
-  --color-sidebar: var(--sidebar);
-  --color-capture: var(--capture);
-  --shadow-soft: var(--soft-shadow);
-  --shadow-capture: var(--capture-shadow);
+@theme {
+  /*
+   * Astryx components take their spacing from the theme through props. The Tailwind spacing
+   * utilities left in the app are fixed geometry (list dots, the logo badge, the reading column,
+   * the keyboard-pinned composer), so they keep Tailwind's 4px unit instead of the bridge's
+   * theme-scaled one.
+   */
+  --spacing: 0.25rem;
   --breakpoint-phone: 47.5rem;
   --breakpoint-tablet: 68.75rem;
   --breakpoint-wide: 93.75rem;
@@ -95,19 +31,15 @@
   }
 }
 @layer base {
-  * {
-    border-color: var(--border);
-  }
   html,
   body {
     overscroll-behavior: none;
   }
   body {
     margin: 0;
-    background: var(--background);
-    color: var(--foreground);
-    font-family: 'Geist Variable', sans-serif;
-    font-size: 14px;
+    background: var(--color-background-body);
+    color: var(--color-text-primary);
+    font-family: var(--font-family-body);
     -webkit-font-smoothing: antialiased;
   }
   button,
@@ -116,44 +48,8 @@
   textarea {
     -webkit-tap-highlight-color: transparent;
   }
-  button:not(:disabled),
-  a {
-    cursor: pointer;
-  }
-  button:disabled {
-    cursor: default;
-    opacity: 0.5;
-  }
-  button,
-  a {
-    transition:
-      opacity 160ms,
-      transform 160ms;
-  }
-  :focus-visible {
-    outline: 2px solid var(--ring);
-    outline-offset: 4px;
-  }
-  input,
-  textarea {
-    font: inherit;
-  }
-  button,
-  input,
-  textarea,
-  a {
-    color: inherit;
-  }
   ::selection {
-    background: var(--secondary);
-  }
-  kbd {
-    font-size: 10px;
-    font-family: inherit;
-    padding: 2px 5px;
-    border: 1px solid var(--border);
-    border-radius: 4px;
-    color: var(--muted-foreground);
+    background: var(--color-accent-muted);
   }
 }
 @media (prefers-reduced-motion: reduce) {

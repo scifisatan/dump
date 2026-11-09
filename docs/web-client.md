@@ -4,20 +4,31 @@ Owns `src/client/`, `index.html`, `public/` and `wrangler.client.jsonc`. For wha
 
 ## Stack and entry points
 
-- React with React Router, Tailwind v4 (tokens and custom variants in `src/client/styles.css`), shadcn/Radix primitives in `components/ui/`, cmdk search, next-themes (Light, Dark, System), lucide-react, sonner, vite-plugin-pwa. Vite builds the client to `dist/client/`.
+- React with React Router, the Astryx design system (`@astryxdesign/core`, see [Design system](#design-system)), Tailwind v4 for the few layout utilities Astryx props don't cover, lucide-react icons, vite-plugin-pwa. Vite builds the client to `dist/client/`.
 - `main.tsx` picks the screen and lazy-loads `App.tsx` (the notebook) or `Marketing.tsx` (the landing page). `store.ts` runs the core's session for the active profile, whose switches reload the page, and exposes `useDumpStore`. `browser-platform.ts` is the browser adapter: IndexedDB, WebSocket, BroadcastChannel and device events. `profiles.ts` keeps the core's notebook registry and the owner keys in localStorage. `registry.ts` answers whether this browser has a notebook.
-- `App.tsx` is large (about 770 lines): the shell, top bar, views and composer are all in it. Grep for the piece you need instead of reading the whole file.
+- `App.tsx` is large (about 780 lines): the shell, top bar, views and composer are all in it. Grep for the piece you need instead of reading the whole file.
 
 ## Views and look
 
-- There is no sidebar. The top bar holds the logo (the badge alone on a phone), Sort inbox when unfiled dumps wait for the owner, and search and Settings grouped together. Sync shows only when it needs attention (offline, paused, signed out, or unable to save): its state beside Settings, with Retry or Sign in, and a dot on the gear. Screen readers always hear the state through the same `role="status"` element. → e2e `app.spec.ts` "two devices merge offline captures" Lists, Done, New list and Today open from search (⌘K); a card's list name opens its list. A list or Done shows a back arrow, its name and its count in place of the logo. → e2e `app.spec.ts` "mobile layout fits and lists open from search"
+- There is no sidebar. The top bar holds the logo (the badge alone on a phone), Sort inbox when unfiled dumps wait for the owner, and search and Settings grouped together. Sync shows only when it needs attention (offline, paused, signed out, or unable to save): its state beside Settings, with Retry or Sign in, and a dot on the gear. Screen readers always hear the state through the same `role="status"` element, named "Sync status" because every Astryx button carries its own status region. → e2e `app.spec.ts` "two devices merge offline captures" Lists, Done, New list and Today open from search (⌘K); a card's list name opens its list. A list or Done shows a back arrow, its name and its count in place of the logo. → e2e `app.spec.ts` "mobile layout fits and lists open from search"
 - There are three kinds of view: home (`/`, every open dump in one list), one view per list, and Done. A path that names no view shows home. Each view is a compact list of dumps with the newest at the bottom and a composer pinned below like a chat. Done has no composer. An empty list or Done centers a larger composer instead of pinning it. Home always ends in Today; an empty Today says "A clear day." and offers example dumps with days, each of which fills the composer. → e2e `connections.spec.ts` "a device-only notebook never contacts a server"
 - Home ends in Today, just above the composer, grouped as [core.md § Data model](core.md#data-model) describes: older undated dumps by the day they were captured, a "done" link at the very top, then Today's heading and its sections, each shown only when it has dumps. → e2e `app.spec.ts` "Today shows what is overdue"
 - Home opens with Today's heading at the top of the screen when Today is taller than the screen, and at the bottom otherwise. The other views open at their newest dump. New dumps scroll into view. No test checks the opening scroll position.
 - While you type, the composer shows the day it read from the draft (see [core.md § Data model](core.md#data-model)), and its × sends the dump without a date. A dated dump shows its day on its card, red when overdue. The day and the card's menu both offer Today, Tomorrow, Pick a day… and Clear date.
 - Backups (export and import) live in Settings. Clear done and Delete list both need a confirm click.
-- Keep the lime asterisk badge, the off-white and charcoal surfaces, and the lime actions. Each list's color is only a category accent, not a theme.
+- Keep the lime asterisk badge and the lime actions on Matcha's cream (light) and near-black (dark) surfaces. Each list's color is only a category accent, not a theme.
 - Motion uses opacity and transform at 120–180ms and honors reduced motion. Every gesture also has an accessible button. There are two deliberate exceptions, described below: the keyboard height transition and the loading screen's loop.
+
+## Design system
+
+- Every screen is built from Astryx components (`npx astryx component <Name>` prints a component's props). Raw elements remain only where Astryx has nothing: the list colour swatches and `ListDot` (each list's colour is data, painted inline), the `Brand` badge, the hidden username field that lets password managers keep one key per server, and the backup file input. No test checks this; `npx astryx doctor --built .` reviews it.
+- The look comes from the local `dump` theme (`src/themes/dump/dumpTheme.ts`), which extends Matcha: Dump's lime for actions (accent text and icons stay olive in light mode, where lime is unreadable) and Geist, bundled through `dump.fonts.css`, in place of Matcha's Google-hosted fonts, which the CSP blocks. After editing the source, run `npx astryx theme build src/themes/dump/dumpTheme.ts`. `npx astryx theme` commands regenerate `src/astryx-themes.ts`; never edit it by hand. The theme's background colours are repeated in `index.html` (loading screen, `theme-color`) and the manifest in `vite.config.ts`, so change them together. No test checks the theme.
+- Light, Dark and System live in `lib/colorMode.ts`: it stores the choice under localStorage `dump-theme`, sets the `light`/`dark` class on `<html>` like `public/theme-init.js` does before first paint, and gives `<Theme>` the resolved mode. → e2e `app.spec.ts` "dialogs center, restore focus, and theme preference survives reload"
+- `styles.css` declares the cascade-layer order first, so Tailwind utilities sit above Astryx's styles, and imports Astryx's Tailwind bridge, which turns classes like `text-primary`, `bg-muted` and `bg-accent-bg` into theme tokens. It pins Tailwind's spacing unit to 4px: the spacing utilities left are fixed geometry (dots, the badge, the reading column, the keyboard-pinned composer), while Astryx components take spacing from the theme through props.
+- `cn` (`lib/utils.ts`) only joins class names; it doesn't resolve conflicts, so a component that needs a variant takes a prop for it (`Brand size`, `ListDot size`).
+- Toasts come from `toast()` in `lib/toast.tsx`, which code outside React (the service-worker update prompt) can call too; they sit at the top end below the top bar. Astryx repeats each toast in a hidden announcement, so tests look for toast text inside the Notifications region.
+- Links go through `components/RouterLink.tsx` (Astryx's `LinkProvider` in `main.tsx`), so app paths navigate without a reload.
+- Astryx's closed menus stay in the DOM, hidden; a dump card's text therefore includes its menu's labels, and tests check the card's list chip ("Open Ideas") rather than its text. The ⌘K palette sits near the top of the screen; other dialogs are centered.
 
 ## First run, onboarding, owner keys
 
@@ -27,7 +38,7 @@ Owns `src/client/`, `index.html`, `public/` and `wrangler.client.jsonc`. For wha
 
 ## Content Security Policy
 
-The static host sends a CSP from `public/_headers` that allows only the app's own scripts. Keep the client free of inline and third-party scripts; this is why `public/theme-init.js` is a separate file. → e2e `app.spec.ts` "…under the CSP"
+The static host sends a CSP from `public/_headers` that allows only the app's own scripts. Keep the client free of inline and third-party scripts; this is why `public/theme-init.js` is a separate file. Fonts and stylesheets must be self-hosted too (`font-src 'self'`), so bundle fonts with `@fontsource` instead of linking a font service. → e2e `app.spec.ts` "…under the CSP"
 
 ## Phone keyboard
 

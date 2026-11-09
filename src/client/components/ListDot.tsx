@@ -1,10 +1,13 @@
-import { cn } from '../lib/utils';
+// A list's colour mark. The colour is data the owner picked (shared/schema.ts), so it is painted
+// inline; the default is the inbox's colour.
+const sizes = { sm: 'size-1.5', md: 'size-2', lg: 'size-3' };
 
-export function ListDot({ color, className }: { color?: string; className?: string }) {
+export function ListDot({ color, size = 'md' }: { color?: string; size?: keyof typeof sizes }) {
   return (
     <span
-      className={cn('inline-block size-2 min-w-2 rounded-full bg-[#aca2b7]', className)}
-      style={color ? { background: color } : undefined}
+      aria-hidden
+      className={`inline-block shrink-0 rounded-full ${sizes[size]}`}
+      style={{ background: color ?? '#aca2b7' }}
     />
   );
 }

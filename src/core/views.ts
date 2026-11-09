@@ -154,7 +154,9 @@ export function linkHost(url: string) {
 export const searchText = (dump: Dump, notebook: Notebook) =>
   [dump.text, notebook.listLabel(dump.list), ...dump.tags.map((tag) => `#${tag}`)].join(' ');
 
-const fold = (text: string) => text.normalize('NFD').replace(/\p{M}/gu, '').toLocaleLowerCase();
+/** Lower case without accents, as `search` compares text. */
+export const fold = (text: string) =>
+  text.normalize('NFD').replace(/\p{M}/gu, '').toLocaleLowerCase();
 
 export function search(query: string, notebook: Notebook) {
   const words = fold(query).split(/\s+/).filter(Boolean);

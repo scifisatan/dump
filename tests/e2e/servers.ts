@@ -36,8 +36,11 @@ export async function startOnboarding(page: Page) {
 
 export async function onboard(page: Page, address = HOME) {
   await startOnboarding(page);
-  await page.getByRole('button', { name: /Sync with your server/ }).click();
+  // A ClickableCard: the card takes the press; its button is for keyboards and screen readers.
+  await page.getByText('Sync with your server', { exact: true }).click();
   await connectServer(page, address);
   await expect(page.getByRole('textbox', { name: 'Capture a thought' })).toBeEnabled();
-  await expect(page.getByRole('status')).toContainText('Saved · local development');
+  await expect(page.getByRole('status', { name: 'Sync status' })).toContainText(
+    'Saved · local development',
+  );
 }
