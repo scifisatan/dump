@@ -1,6 +1,6 @@
 # Architecture
 
-How Dump fits together and why it is built this way. Day-to-day rules for each area are in the docs that [AGENTS.md](../AGENTS.md) maps.
+How Dump fits together and why it is built this way: the runtime picture, the code's layers and the seams between them, the words the code uses, the code map, and the decisions behind it. Day-to-day rules for each area are in the docs that [AGENTS.md](../AGENTS.md) maps.
 
 ## The big picture
 
@@ -95,6 +95,67 @@ flowchart TB
 - **Nothing is physically deleted.** Removal sets `deleted: true`, a tombstone that syncs like any edit. Without it, an older copy would bring the dump back.
 - **The server doesn't read rows.** It stores and relays them. Every client decodes rows with Zod in `readRows` (`src/shared/merge.ts`) and skips any that fail.
 
+## Code layers and seams
+
+The code is a stack, and each layer imports only the layers below it ([CODING_STANDARDS.md § Layers](../CODING_STANDARDS.md#layers) has the rules, and lint enforces the imports). Put a behavior in the lowest layer that can own it, and every client gets it.
+
+| Layer | Paths | What it owns |
+| --- | --- | --- |
+| Contracts | `src/shared/` | Row formats, the API's request and response schemas, the merge store, due days. |
+| Core | `src/core/` | Everything a notebook does: commands, the filing queue, the sync lifecycle, views, profiles and sessions. It runs in browsers, JavaScriptCore, Hermes and Node. |
+| Platforms | `src/client/browser-platform.ts` and `src/client/profiles.ts`; `mac/engine/platform.ts` and `mac/engine/settings.ts`, over `mac/Sources/DumpKit/`; `mobile/src/platform.ts` and `mobile/src/profiles.ts`; `cli/platform.ts` | Where a notebook is stored, device events, settings and owner keys, behind `ClientPlatform` and `Setting`. |
+| Surfaces | `src/client/` (React); `mac/engine/index.ts` and `mac/Sources/Dump/` (SwiftUI); `mobile/src/` screens (React Native); `cli/index.ts` and `cli/render.ts` (text) | Drawing the core's views and calling its commands, and nothing more. |
+
+The server stands beside the stack: `src/server/` imports only the contracts and relays rows without reading them.
+
+A seam is where a change in one place reaches code in another that the first place's compiler can't see. `npm run verify` runs the checks on both sides of every seam a change reaches; this table says what is on the far side, and where no check can look:
+
+| Seam | Defined in | Far side | What catches a mismatch |
+| --- | --- | --- | --- |
+| Row format | `dumpSchema` and `collectionSchema` in `src/shared/schema.ts`, which are strict | Every reader, backups (`exportSchema`), and installed builds older than the change | `tests/domain.test.ts` for current builds; nothing for installed older ones ([core.md § Data model](core.md#data-model)). |
+| HTTP contract | `src/shared/api.ts`, `src/shared/classify.ts` | `src/server/index.ts`; `src/core/connection.ts`, `server-link.ts` and `classify.ts`; servers already deployed | Unit tests and e2e. A server and the hosted client deploy separately, so deploy in the order [release.md § Deploy](release.md#deploy) gives. |
+| Commands and views | what `createDumpClient` returns (`src/core/client.ts`), and `src/core/views.ts` | `src/client/`, `mobile/src/`, `cli/`, and the engine in `mac/engine/index.ts` | Each client's typecheck, and `tests/views.test.ts`. |
+| Swift bridge | the `engine` object in `mac/engine/index.ts`, `Native` in `mac/engine/native.ts`, and the `host` callbacks | `mac/Sources/DumpKit/Engine.swift`, which names each of them in a string and decodes the engine's JSON into `Models.swift` | `tests/seams.test.ts` for the names; `swift test` for arguments and results. A renamed result field compiles on both sides and fails at run time; Swift ignores fields it doesn't decode, so adding one is safe. |
+| Platform | `ClientPlatform` in `src/core/client.ts`, `Setting` in `src/core/setting.ts` | The four platform adapters, and the fake `platform()` in `tests/client.test.ts` | Each one's typecheck, the fake's included. |
+| Web APIs | what `src/core` and `src/shared` call at run time | `mac/engine/polyfills.ts`, `mobile/src/runtime.ts` | Lint rejects browser-only globals; `swift test` runs the engine in JavaScriptCore; nothing runs Hermes, which is checked by hand ([mobile.md § Runtime](mobile.md#runtime)). |
+
+To see a layer run rather than read it:
+
+| Layer | Drive it with | Details |
+| --- | --- | --- |
+| Core, sync, Jev's filing | `node cli/dump.mjs` devices against `npm run scratch` | [testing.md § The dump CLI](testing.md#the-dump-cli) |
+| Server | `npm run scratch`, its log, and `curl` with an allowed `Origin` | [server.md § Local servers](server.md#local-servers) |
+| Web app | the preview of `npm run dev` on 6191 | [web-client.md](web-client.md) |
+| Mac app | `dump-check`, the app's log, offscreen renders | [mac.md § Build and check](mac.md#build-and-check) |
+| Phone app | the iOS simulator | [mobile.md § Build and check](mobile.md#build-and-check) |
+
+## Words
+
+The code's names differ from the product's in a few places. Grep for the code name.
+
+| Word | Meaning | In code |
+| --- | --- | --- |
+| dump | One captured thought or link. | `Dump`, the `dumps` table |
+| list | A place dumps are filed in, such as To do or Buy. | `Collection` (never `List`), the `lists` table |
+| `!list` prefix | A list named at the start of a dump, which files it at capture. | `listPrefix`, `prefixFor` |
+| inbox, unfiled | Open dumps with no list. Sort inbox walks the ones Jev isn't sorting. | `list: null`; `Notebook.unfiled` |
+| To do | The list Jev falls back to when it is unsure. | `DEFAULT_LIST` (`'todo'`) |
+| filing | Putting a dump in a list, by the owner or by Jev. | `file`, `classified_by` |
+| Jev, sorting | The model that files dumps, and a dump waiting on its answer. | `autoFile`, `/api/classify`, `Snapshot.sorting` |
+| tombstone | A removed dump or list, kept so the removal syncs. | `deleted: true` |
+| day | The calendar day a dump is for. | `due`, `parseDue` |
+| home, Today | The one view of every open dump, ending in Today's sections. | `home`, `agenda` |
+| place | A view: home, one list, or Done. | `Place` |
+| notebook | One owner's dumps and lists, on a server or on one device. In `views.ts`, `Notebook` is one snapshot split into open, done and unfiled. | `Notebook` |
+| profile | A notebook this device knows, and the server it syncs with. | `ServerProfile`, `profileRegistry`, stored as `dump-connections` |
+| server | One owner's Worker and Durable Object. Its `instanceId` names its notebook. | `ServerLocation`, `DumpDO` |
+| owner key, ticket | The server's one secret, and the short-lived proof of it that opens a WebSocket. | `OWNER_KEY`, `/api/sync-ticket` |
+| session | The notebook open on this device, and connecting, switching and signing in. | `createSession` |
+| platform | What a device supplies to the core. | `ClientPlatform` |
+| snapshot | The core's state, which surfaces draw. The Mac engine's `snapshot(full)` is a different shape: views already grouped and labelled, decoded by `Models.swift`. | `Snapshot` |
+| engine | The core bundled for the Mac's JavaScriptCore, and the API Swift calls. | `mac/engine/`, `Engine.swift` |
+| web app origin | The `Origin` a native app presents to a server. | `originSetting` |
+
 ## Code map
 
 ```
@@ -139,6 +200,8 @@ mac/                   menu bar app (Swift); see docs/mac.md
 ├── Sources/DumpKit/   runs the engine: native timers, HTTP, WebSocket, files, user defaults, Keychain
 ├── Sources/Dump/      AppKit/SwiftUI shell: hotkey, capture panel, notebook window, settings, menu bar
 ├── Sources/dump-check/  headless sync check against a running server
+├── Tests/             DumpKit tests: the engine in JavaScriptCore
+├── Package.swift      SwiftPM targets: Dump, DumpKit, dump-check, tests
 └── scripts/           build-app.sh (build, sign, --install) and the icon renderer
 mobile/                iOS and Android app (Expo, React Native); its own npm package; see docs/mobile.md
 ├── index.ts           loads the runtime shims, then the app
@@ -160,7 +223,14 @@ mobile/                iOS and Android app (Expo, React Native); its own npm pac
     ├── menu.tsx       native menus, with an action sheet in Expo Go
     ├── ui.tsx         icons, sections, buttons, header items
     └── theme.ts       light and dark colors from the web app
-tests/                 Vitest unit tests + Playwright e2e
+cli/                   the dump CLI: the core on Node, as a device driven from a shell
+├── dump.mjs           bundles index.ts with the core (rolldown) and runs it
+├── index.ts           arguments, the run's lifecycle, commands
+├── platform.ts        ClientPlatform: a folder of TinyBase JSON files, settings, keys, Origin
+└── render.ts          the core's views as text, one line per dump
+scripts/
+└── verify.mjs         runs the checks a change reaches
+tests/                 Vitest unit, seam and docs tests + Playwright e2e
 public/                _headers (CSP), theme-init.js, icons
 docs/                  notes for coding agents, one per area (see AGENTS.md)
 wrangler.jsonc         API server deploy config

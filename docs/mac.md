@@ -36,9 +36,9 @@ Owns `mac/`. For how a user installs and uses the app, read README § Mac app. T
 
 ## Build and check
 
-- After any change under `mac/`, `src/core` or `src/shared`: `npm run mac:engine && (cd mac && swift build && swift test)`. `swift test` builds only `DumpKit` and its tests; `swift build` compiles the `Dump` app target. `npm run typecheck` also typechecks `mac/engine`.
+- After any change under `mac/`, `src/core` or `src/shared`: `npm run mac:engine && (cd mac && swift build && swift test)`. `swift test` builds only `DumpKit` and its tests; `swift build` compiles the `Dump` app target. `swift test` and `dump-check` load the engine from `mac/build/engine.js`, so build it first, or they run the previous engine. `npm run typecheck` also typechecks `mac/engine`.
 - `npm run mac:build` builds `mac/build/Dump.app`. `npm run mac:install` also signs it, replaces `/Applications/Dump.app` and relaunches it; run that only when asked. Signing uses `DUMP_SIGN_IDENTITY` from `mac/.env.local` (not committed), falling back to ad hoc signing. A stable identity keeps Keychain access across rebuilds.
-- To check sync against a real server, start a scratch server ([server.md § Local servers](server.md#local-servers)), then run `cd mac && swift run dump-check --server http://localhost:6195 --key <key from tests/e2e/server.env> --origin http://localhost:6194 --data <dir> --capture TEXT`. Run it again with a second `--data <dir>` and `--expect TEXT` to confirm the dump reached another device. Each run is a new device that joins the server's notebook. `--list` files the captures.
+- To check sync against a real server, start a scratch server ([server.md § Local servers](server.md#local-servers)), then run `cd mac && swift run dump-check --server http://localhost:6195 --key <key from tests/e2e/server.env> --data <dir> --capture TEXT`. Run it again with a second `--data <dir>` and `--expect TEXT` to confirm the dump reached another device. Each run is a new device that joins the server's notebook. `--list` files the captures. To check what the Mac app itself holds without opening it, `node cli/dump.mjs peek` a notebook file from the storage folder below.
 - Logs from the running app: `/usr/bin/log show --last 1m --predicate 'process == "Dump"' --style compact`.
 
 ## Seeing the UI

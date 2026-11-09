@@ -176,10 +176,11 @@ test('the API needs the owner key and answers only listed client origins', async
   expect(ping.headers()['access-control-allow-origin']).toBe(CLIENT);
   const { auth, instanceId } = await ping.json();
   expect(auth).toBe('owner-key');
-  for (const authorization of [
+  const authorizations: Record<string, string>[] = [
     {},
     { Authorization: 'Bearer not-the-owner-key-not-the-owner-key' },
-  ]) {
+  ];
+  for (const authorization of authorizations) {
     const headers = { ...origin, ...authorization };
     expect((await request.post(`${HOME}/api/sync-ticket`, { headers })).status()).toBe(401);
     const classify = await request.post(`${HOME}/api/classify`, {
@@ -213,8 +214,13 @@ test('the API needs the owner key and answers only listed client origins', async
   });
   expect(preflight.status()).toBe(204);
   expect(preflight.headers()['access-control-allow-headers']).toContain('Authorization');
+  const refused: Record<string, string>[] = [
+    { Origin: 'https://untrusted.example' },
+    { Origin: HOME },
+    {},
+  ];
   for (const path of ['/api/ping', '/api/sync'])
-    for (const headers of [{ Origin: 'https://untrusted.example' }, { Origin: HOME }, {}]) {
+    for (const headers of refused) {
       const rejected = await request.get(`${HOME}${path}`, { headers });
       expect(rejected.status()).toBe(403);
       expect(rejected.headers()['access-control-allow-origin']).toBeUndefined();

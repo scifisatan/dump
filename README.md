@@ -91,7 +91,8 @@ npm run dev
 
 Open http://localhost:6191. This runs the web client (port 6191) and a local API server (port 6190). On first run, choose **Get started → Sync with your server**; the local address and the dev owner key are filled in for you. Local data is separate from production. For automatic filing locally, add `JEV_API_KEY=your-key` to `.env.local`.
 
-- `npm run check` runs the format check, lint, unit tests, type checks and builds.
+- `npm run check` runs the format check, lint, unit tests, type checks and builds. `npm run verify` runs only the checks your change reaches, Swift and the phone app included.
+- `npm run scratch` starts a throwaway server on port 6195, and `node cli/dump.mjs` is a notebook in your shell that can join it ([docs/testing.md](docs/testing.md#the-dump-cli)).
 - `npm run test:e2e` runs the end-to-end tests. Run `npx playwright install chromium` once first.
 
 [docs/architecture.md](docs/architecture.md) explains how it all fits together and why. Coding agents start at [AGENTS.md](AGENTS.md).

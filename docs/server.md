@@ -32,5 +32,5 @@ Owns `src/server/` and `wrangler.jsonc`. For the deploy steps and security summa
 
 - The `api` task under `run.tasks` in `vite.config.ts` (started by `npm run dev`) runs `wrangler dev` on 6190, allowing `http://localhost:6191`, with the owner key `dump-local-development-owner-key`. Its data lives in `.wrangler/state`.
 - The e2e servers load only `tests/e2e/server.env`, so they never have a Jev key. See [testing.md](testing.md).
-- To run a server you can break without touching Abi's dev data: `npx wrangler dev --port 6195 --local-upstream localhost:6195 --persist-to .wrangler/scratch-state --env-file tests/e2e/server.env`. It allows the origin `http://localhost:6194` and uses the e2e owner key. Stop it and delete the state folder when you're done.
+- `npm run scratch` (the `scratch:server` task) runs a server you can break on 6195, without touching Abi's dev data. Each start empties `.wrangler/scratch-state`. It uses the e2e owner key and has no Jev key, and it allows `http://localhost:6191` and `http://localhost:6194`, so the dump CLI, the Mac's `dump-check` and the phone simulator join it without an origin setting. → no test: checked by hand with two CLI devices ([testing.md § The dump CLI](testing.md#the-dump-cli)).
 - Deploying: [release.md](release.md).
