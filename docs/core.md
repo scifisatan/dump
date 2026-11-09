@@ -20,8 +20,9 @@ Owns `src/shared/` and `src/core/`. These are the platform-independent parts tha
   - `session.ts`: the open notebook, and connecting, switching and signing in. The Mac and the phone open another notebook in place; the web app passes `reopen` and reloads.
   - `origin.ts`: the web app origin a native app presents to servers.
   - `device.ts`: one hub for a native app's device events, which fills `isOnline` and `watch`.
-- Platforms plug in through `ClientPlatform` in `client.ts`. The browser adapter is `src/client/browser-platform.ts`, the Mac adapter is `mac/engine/platform.ts` and the phone adapter is `mobile/src/platform.ts`. Persistence, tab sync (`tabs`, left out where there are no tabs), device events, settings and owner keys are adapter concerns. Keep this boundary, because a future Raycast client would plug in the same way.
+- Platforms plug in through `ClientPlatform` in `client.ts`. The browser adapter is `src/client/browser-platform.ts`, the Mac adapter is `mac/engine/platform.ts`, the phone adapter is `mobile/src/platform.ts`, and the dump CLI's is `cli/platform.ts` ([testing.md § The dump CLI](testing.md#the-dump-cli)). Persistence, tab sync (`tabs`, left out where there are no tabs), device events, settings and owner keys are adapter concerns. Keep this boundary: a future Raycast client would plug in the same way the CLI does.
 - `src/core` also runs in the Mac's JavaScriptCore and the phone app's Hermes, so it may use only the APIs that `mac/engine/polyfills.ts` installs and `mobile/src/runtime.ts` provides. See [mac.md](mac.md#polyfills) and [mobile.md](mobile.md#runtime).
+- Every client runs this code, so a change here reaches all of them, including through seams that only `swift test` or the phone's typecheck can see. [architecture.md § Code layers and seams](architecture.md#code-layers-and-seams) lists each seam's far side.
 
 ## Data model
 
@@ -32,7 +33,7 @@ Owns `src/shared/` and `src/core/`. These are the platform-independent parts tha
 - A list is also an atomic JSON record in the `lists` table, with a stable ID, a label, a color and a numeric `position`. Renaming keeps the ID. Nothing reorders lists yet.
 - A list's `!list` prefix is its label in lower case with hyphens for spaces (`prefixFor`, beside `listPrefix` in `schema.ts`). New lists pick a color from `LIST_COLORS`.
 - Removing a dump or list writes `deleted: true`, and that tombstone syncs like any other edit. Rows are never removed without a deliberate compaction design.
-- Formats change in place. There are no schema versions or migrations while Dump is prerelease.
+- Formats change in place. There are no schema versions or migrations while Dump is prerelease. `dumpSchema` and `collectionSchema` are strict, so an installed build older than a new field skips every row that carries it until that build is updated. Only rebuilding every client fixes this.
 - `readRows` decodes every row with Zod and skips the ones that fail. It is the only way to read the store. → `tests/domain.test.ts` "skips rows a peer sent that do not decode"
 
 ## Views

@@ -10,14 +10,15 @@ Owns `src/client/`, `index.html`, `public/` and `wrangler.client.jsonc`. For wha
 
 ## Views and look
 
-- There is no sidebar. The top bar holds the logo (the badge alone on a phone), Sort inbox when unfiled dumps wait for the owner, and search and Settings grouped together. Sync shows only when it needs attention (offline, paused, signed out, or unable to save): its state beside Settings, with Retry or Sign in, and a dot on the gear. Screen readers always hear the state through the same `role="status"` element, named "Sync status" because every Astryx button carries its own status region. → e2e `app.spec.ts` "two devices merge offline captures" Lists, Done, New list and Today open from search (⌘K); a card's list name opens its list. A list or Done shows a back arrow, its name and its count in place of the logo. → e2e `app.spec.ts` "mobile layout fits and lists open from search"
-- There are three kinds of view: home (`/`, every open dump in one list), one view per list, and Done. A path that names no view shows home. Each view is a compact list of dumps with the newest at the bottom and a composer pinned below like a chat. Done has no composer. An empty list or Done centers a larger composer instead of pinning it. Home always ends in Today; an empty Today says "A clear day." and how to give a dump a day, with nothing to click. Empty states carry a small icon and no buttons; the composer is the only action. → e2e `connections.spec.ts` "a device-only notebook never contacts a server"
-- Home ends in Today, just above the composer, grouped as [core.md § Data model](core.md#data-model) describes: older undated dumps by the day they were captured, a "done" link at the very top, then Today's heading and its sections, each shown only when it has dumps. → e2e `app.spec.ts` "Today shows what is overdue"
-- Home opens with Today's heading at the top of the screen when Today is taller than the screen, and at the bottom otherwise. The other views open at their newest dump. New dumps scroll into view. No test checks the opening scroll position.
-- While you type, the composer shows the day it read from the draft (see [core.md § Data model](core.md#data-model)), and its × sends the dump without a date. A dated dump shows its day on its card, red when overdue. The day and the card's menu both offer Today, Tomorrow, Pick a day… and Clear date.
-- Backups (export and import) live in Settings. Clear done and Delete list both need a confirm click.
-- Keep the lime asterisk badge and the lime actions on Matcha's cream (light) and near-black (dark) surfaces. Each list's color is only a category accent, not a theme.
-- Motion uses opacity and transform at 120–180ms and honors reduced motion. Every gesture also has an accessible button. There are two deliberate exceptions, described below: the keyboard height transition and the loading screen's loop.
+- No sidebar: the top bar holds the logo (the badge alone on a phone), Sort inbox while unfiled dumps wait, and search with Settings; a list or Done shows a back arrow, its name and count instead. The rest opens from search (⌘K) or a card's list name. → e2e `app.spec.ts` "the top bar holds the logo", "mobile layout fits and lists open from search"
+- Sync shows only when it needs attention ([core.md § Views](core.md#views)): its state beside Settings, with Retry or Sign in, and a dot on the gear. Screen readers always hear it through the same `role="status"`, named "Sync status" because every Astryx button carries its own status region. → e2e `app.spec.ts` "two devices merge offline captures"
+- The views are home (`/`), one per list, and Done; any other path shows home. Each reads like a chat, newest at the bottom above a pinned composer. Done has no composer; an empty view centers a larger one. → e2e `app.spec.ts` "a path that names no view shows home"
+- Home ends in Today ([core.md § Data model](core.md#data-model)) under a "done" link. An empty Today says "A clear day." and how to give a dump a day. Empty states carry a small icon and no buttons: the composer is the only action. → e2e `app.spec.ts` "Today shows what is overdue", `connections.spec.ts` "a device-only notebook never contacts a server"
+- Home opens at Today's heading when Today is taller than the screen, so today comes first; other views open at their newest dump, and new dumps scroll into view. → e2e `app.spec.ts` "home opens at Today’s heading"
+- The composer shows the day it read from the draft; its × dumps without one. A card's day and its menu offer the same choices. → e2e `app.spec.ts` "Today shows what is overdue"
+- Backups live in Settings. Clear done and Delete list take a confirm click, since there is no undo. → e2e `app.spec.ts` "prefix filing, search, export", "clearing done removes every completed dump", "deleting a list takes a confirm click"
+- Keep the lime asterisk badge and the lime actions on Matcha's cream (light) and near-black (dark) surfaces. A list's color is a category accent, not a theme. → no test: compare the screenshots e2e saves in `test-results/`.
+- Motion uses opacity and transform at 120–180ms and honors reduced motion. Every gesture also has a button. The keyboard height and the loading loop are deliberate exceptions, below. → no test: review CSS changes against it.
 
 ## Design system
 
@@ -34,9 +35,10 @@ Owns `src/client/`, `index.html`, `public/` and `wrangler.client.jsonc`. For wha
 
 ## First run, onboarding, owner keys
 
-- `/` (and any notebook path) shows the notebook if this browser has a saved notebook, and the landing page otherwise. The decision is made synchronously from localStorage (`hasNotebook`, `registry.ts`, which stays dependency-free). There is no redirect, and returning visitors never load landing or onboarding code. `/marketing` stays reachable and never initializes the notebook. → e2e `app.spec.ts` "a returning visitor opens the notebook at /", `connections.spec.ts` "a new visitor gets the landing page in place"
-- Onboarding (`components/Onboarding.tsx`) saves nothing until the server accepts the owner key (checked with `POST /api/sync-ticket`) or the visitor chooses this device only. A device-only notebook asks the browser for persistent storage. Settings (`ServerSettings.tsx`, `ServerConnection.tsx`) can connect a server later, and verifies a new key before calling `reconnect()`.
-- The profile registry is stored under localStorage `dump-connections`. Owner keys are stored outside it, under `dump-owner-key:<profile-id>`.
+- `/` (and any notebook path) shows the notebook if this browser has one, else the landing page. `hasNotebook` (`registry.ts`, dependency-free) decides synchronously from localStorage, so there is no redirect and returning visitors never load landing or onboarding code. `/marketing` never initializes the notebook. → e2e `app.spec.ts` "a returning visitor opens the notebook at /", "marketing is separate", `connections.spec.ts` "a new visitor gets the landing page in place"
+- Onboarding (`components/Onboarding.tsx`) saves nothing until the server accepts the owner key (`POST /api/sync-ticket`) or the visitor picks this device only. Settings (`ServerSettings.tsx`, `ServerConnection.tsx`) can connect later, checking the key before `reconnect()`. → e2e `connections.spec.ts` "a new visitor gets the landing page", "a device-only notebook never contacts a server"
+- A device-only notebook asks for persistent storage. → no test: headless Chromium answers silently.
+- The profile registry is localStorage `dump-connections`; owner keys sit under `dump-owner-key:<profile-id>`. → e2e `connections.spec.ts` "a new visitor gets the landing page", "a device whose key stops working"
 
 ## Content Security Policy
 
@@ -48,8 +50,7 @@ The static host sends a CSP from `public/_headers` that allows only the app's ow
 - `useVisualViewport` (`lib/viewport.ts`) writes `--vv-height` and `--vv-top` on the root element, and sets `data-keyboard` while the keyboard is open (the Tailwind `keyboard:` variant). On touch devices it predicts the height on focus and blur from the last measured keyboard height, which it remembers in localStorage. That lets the layout move with the keyboard; it then corrects to the real measurement. Pinch zoom is ignored.
 - The height transition uses iOS's keyboard curve (250ms), a deliberate exception to the motion rule.
 - Composer submit buttons call `preventDefault` on pointerdown, so tapping them keeps focus and the keyboard open. `html` and `body` disable overscroll.
-- A desktop browser can't raise an iOS keyboard. To simulate one, set `--vv-height` and `data-keyboard` on `document.documentElement` by hand. In a hidden preview pane, CSS transitions freeze at time 0; step through them with `document.getAnimations()` and `currentTime`.
-- This has not been checked on a real phone yet.
+- A desktop browser can't raise an iOS keyboard. To simulate one, set `--vv-height` and `data-keyboard` on `document.documentElement` by hand. In a hidden preview pane, CSS transitions freeze at time 0; step through them with `document.getAnimations()` and `currentTime`. → no test: the keyboard handling hasn't been checked on a real phone.
 
 ## Loading screen
 

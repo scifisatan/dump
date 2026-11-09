@@ -1,6 +1,8 @@
 node_modules/
 dist/
 .wrangler/
+# Devices of the dump CLI (cli/)
+.dump/
 .backups/
 .dev.vars
 .dev.vars.*

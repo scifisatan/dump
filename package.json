@@ -5,20 +5,23 @@
   "type": "module",
   "scripts": {
     "dev": "vp run --parallel web",
+    "scratch": "vp run scratch:server",
+    "dump": "node cli/dump.mjs",
     "build": "npm run typecheck && npm run build:client && npm run build:server",
     "build:client": "vp build",
     "build:server": "wrangler deploy --dry-run --outdir dist/server",
     "mac:engine": "node mac/engine/build.mjs",
     "mac:build": "mac/scripts/build-app.sh",
     "mac:install": "mac/scripts/build-app.sh --install",
-    "typecheck": "tsc -p tsconfig.client.json && tsc -p tsconfig.json && tsc -p mac/engine/tsconfig.json",
+    "typecheck": "tsc -p tsconfig.client.json && tsc -p tsconfig.json && tsc -p mac/engine/tsconfig.json && tsc -p cli/tsconfig.json && tsc -p tests/tsconfig.json",
     "preview": "vp preview",
     "typegen": "wrangler types",
     "format": "vp fmt",
     "lint": "vp lint",
     "test": "vp test",
     "test:e2e": "playwright test",
-    "check": "vp check && vp test && npm run build"
+    "check": "vp check && vp test && npm run build",
+    "verify": "node scripts/verify.mjs"
   },
   "dependencies": {
     "@astryxdesign/core": "0.7.11",

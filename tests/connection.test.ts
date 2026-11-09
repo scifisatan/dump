@@ -6,6 +6,7 @@ import {
   databaseName,
   serverUrl,
   verifyKey,
+  type ServerCheck,
 } from '../src/core/connection';
 import { originSetting } from '../src/core/origin';
 import { profileRegistry } from '../src/core/profiles';
@@ -110,7 +111,8 @@ describe('personal server connections', () => {
     const server = { baseUrl: 'https://dump.example.com', instanceId: 'a'.repeat(64) };
     const device = { id: crypto.randomUUID(), server: null };
     registry.activate(device);
-    const joined = registry.joining(device, { ...server, auth: 'owner-key', classify: true });
+    const check: ServerCheck = { ...server, auth: 'owner-key', classify: true };
+    const joined = registry.joining(device, check);
     expect(joined).toEqual({ id: device.id, server });
     registry.activate(joined)();
     expect(registry.active()).toEqual(device);

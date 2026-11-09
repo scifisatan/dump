@@ -51,6 +51,15 @@ export default defineConfig({
         cache: false,
       },
       web: { command: 'vp dev', dependsOn: ['api'], cache: false },
+      // A server to break: empty at every start, apart from the dev data, with the e2e owner key.
+      // It allows the dev client and the e2e client, which native apps and the CLI present.
+      'scratch:server': {
+        command: [
+          'rm -rf .wrangler/scratch-state',
+          'wrangler dev --port 6195 --local-upstream localhost:6195 --persist-to .wrangler/scratch-state --env-file tests/e2e/server.env --var ALLOWED_CLIENT_ORIGINS:http://localhost:6191,http://localhost:6194',
+        ],
+        cache: false,
+      },
       'deploy:server': { command: [...verify, 'wrangler deploy'], cache: false },
       'deploy:client': {
         command: [...verify, 'vp build', 'wrangler deploy --config wrangler.client.jsonc'],
@@ -89,5 +98,59 @@ export default defineConfig({
       'react-doctor/no-event-handler': 'warn',
       'react-doctor/effect-needs-cleanup': 'warn',
     },
+    // The layer rules in CODING_STANDARDS.md § Layers. The core runs in browsers, JavaScriptCore
+    // and Hermes, which share no globals beyond the web APIs mac/engine/polyfills.ts and
+    // mobile/src/runtime.ts provide, and no client imports the Worker.
+    overrides: [
+      {
+        files: ['src/core/**', 'src/shared/**'],
+        rules: {
+          'no-restricted-globals': [
+            'error',
+            'window',
+            'document',
+            'localStorage',
+            'sessionStorage',
+            'indexedDB',
+            'navigator',
+            'location',
+          ],
+          'no-restricted-imports': [
+            'error',
+            {
+              patterns: [
+                {
+                  group: [
+                    'react',
+                    'react-*',
+                    'node:*',
+                    'cloudflare:*',
+                    '**/client/**',
+                    '**/server/**',
+                  ],
+                  message: 'src/core and src/shared run on every client: keep them platform-free.',
+                },
+              ],
+            },
+          ],
+        },
+      },
+      {
+        files: ['src/client/**', 'mac/engine/**', 'mobile/**', 'cli/**'],
+        rules: {
+          'no-restricted-imports': [
+            'error',
+            {
+              patterns: [
+                {
+                  group: ['**/server/**'],
+                  message: 'Clients import the contracts in src/shared, never the Worker.',
+                },
+              ],
+            },
+          ],
+        },
+      },
+    ],
   },
 });
