@@ -4,15 +4,10 @@ import Testing
 @testable import DumpKit
 
 @MainActor
-final class EngineTests {
+struct EngineTests {
   let directory = FileManager.default.temporaryDirectory
     .appendingPathComponent("dump-tests-\(UUID().uuidString)")
-  let suite = "dump-tests-\(UUID().uuidString)"
-  lazy var settings = UserDefaults(suiteName: suite)!
-
-  deinit {
-    UserDefaults().removePersistentDomain(forName: suite)
-  }
+  let settings = MemorySettings()
 
   private func engine() throws -> Engine {
     try Engine(directory: directory, settings: settings, keys: OwnerKeys(persistent: false))

@@ -49,11 +49,8 @@ func waitFor(_ what: String, seconds: Double = 20, _ condition: () -> Bool) asyn
 @MainActor
 func run() async throws {
   let options = try Options(Array(CommandLine.arguments.dropFirst()))
-  let suite = "np.com.abishrestha.dump.check.\(UUID().uuidString)"
-  guard let settings = UserDefaults(suiteName: suite) else { throw EngineError("No settings.") }
-  defer { settings.removePersistentDomain(forName: suite) }
   let engine = try Engine(
-    directory: options.data, settings: settings, keys: OwnerKeys(persistent: false))
+    directory: options.data, settings: MemorySettings(), keys: OwnerKeys(persistent: false))
   if let origin = options.origin { try engine.chooseWebApp(origin) }
   try await engine.launch()
 

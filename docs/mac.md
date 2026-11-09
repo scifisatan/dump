@@ -10,7 +10,7 @@ Owns `mac/`. For how a user installs and uses the app, read README § Mac app. T
   - `settings.ts` keeps the engine's settings (the notebook registry and the web app address) in the app's user defaults.
   - `native.ts` is the bridge to Swift.
   - `polyfills.ts` supplies the web APIs that JavaScriptCore lacks.
-- `Sources/DumpKit/` runs the engine in JavaScriptCore and supplies the platform natively: timers, randomness, HTTP (`HTTPBridge.swift`), WebSockets (`SocketBridge.swift`), notebook files, user defaults, network state and owner keys in the Keychain (`OwnerKeys.swift`). `Models.swift` decodes the engine's snapshot.
+- `Sources/DumpKit/` runs the engine in JavaScriptCore and supplies the platform natively: timers, randomness, HTTP (`HTTPBridge.swift`), WebSockets (`SocketBridge.swift`), notebook files, settings (`Settings.swift`: user defaults, or memory for `dump-check` and tests), network state and owner keys in the Keychain (`OwnerKeys.swift`). `Models.swift` decodes the engine's snapshot.
 - `Sources/Dump/` is the AppKit and SwiftUI shell: the hotkey (`HotKey.swift`), capture panel (`Capture*.swift`), notebook window (`Notebook*.swift`, with the day badge in `Due.swift`), settings (`SettingsView.swift`) and menu bar (`AppDelegate.swift`). App state lives in `AppModel.swift`.
 - `Sources/dump-check/` is a headless sync check against a running server.
 - `scripts/build-app.sh` builds, signs and installs the app (`--install`). `scripts/render-icon.swift` draws the icon.
