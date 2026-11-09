@@ -2,7 +2,6 @@ import { defineConfig } from 'vite-plus';
 import react from '@vitejs/plugin-react';
 import tailwindcss from '@tailwindcss/vite';
 import { VitePWA } from 'vite-plugin-pwa';
-import { fileURLToPath } from 'node:url';
 
 // Unit tests are plain Node code; the service worker plugin only gets in the way.
 const isVitest = Boolean(process.env.VITEST);
@@ -10,7 +9,6 @@ const isVitest = Boolean(process.env.VITEST);
 const verify = ['vp lint', 'vp test', 'npm run typecheck'];
 
 export default defineConfig({
-  resolve: { alias: { '@': fileURLToPath(new URL('./src/client', import.meta.url)) } },
   plugins: [
     react(),
     tailwindcss(),
@@ -23,8 +21,8 @@ export default defineConfig({
           name: 'Dump',
           short_name: 'Dump',
           description: 'A place for everything on your mind.',
-          theme_color: '#f7f7f5',
-          background_color: '#f7f7f5',
+          theme_color: '#f0f0e0',
+          background_color: '#f0f0e0',
           display: 'standalone',
           start_url: '/',
           icons: [
@@ -65,7 +63,15 @@ export default defineConfig({
     printWidth: 100,
     singleQuote: true,
     trailingComma: 'all',
-    ignorePatterns: ['package-lock.json', 'public/**', 'docs/**', '*.md'],
+    // Astryx writes these; `astryx theme build --check` compares them byte for byte.
+    ignorePatterns: [
+      'package-lock.json',
+      'public/**',
+      'docs/**',
+      '*.md',
+      'src/astryx-themes.ts',
+      'src/themes/*/*.{js,css,d.ts}',
+    ],
   },
   lint: {
     ignorePatterns: [

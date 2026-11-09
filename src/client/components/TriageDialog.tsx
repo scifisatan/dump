@@ -1,10 +1,14 @@
 import { useEffect, useState } from 'react';
 import { Asterisk, ChevronRight, Trash2 } from 'lucide-react';
+import { Button } from '@astryxdesign/core/Button';
+import { Dialog, DialogHeader } from '@astryxdesign/core/Dialog';
+import { Divider } from '@astryxdesign/core/Divider';
+import { Icon } from '@astryxdesign/core/Icon';
+import { HStack, Layout, LayoutContent, VStack } from '@astryxdesign/core/Layout';
+import { Text } from '@astryxdesign/core/Text';
 import type { Collection, Dump } from '../../shared/schema';
 import type { DumpActions } from './DumpCard';
 import { ListDot } from './ListDot';
-import { Button } from './ui/button';
-import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from './ui/dialog';
 
 export function TriageDialog({
   dumps,
@@ -49,61 +53,86 @@ export function TriageDialog({
   }, [current, lists, actions]);
   return (
     <Dialog
-      open
+      isOpen
+      width={520}
       onOpenChange={(open) => {
         if (!open) close();
       }}
     >
-      <DialogContent>
-        <DialogHeader>
-          <DialogTitle>A little sorting session.</DialogTitle>
-          <DialogDescription>
-            {dumps.length
-              ? `${dumps.length} thoughts to give a home. There’s no hurry.`
-              : 'Every thought has a home. A little lighter.'}
-          </DialogDescription>
-        </DialogHeader>
-        {current ? (
-          <>
-            <p className="py-3 text-[22px] leading-[1.6] whitespace-pre-wrap wrap-anywhere">
-              {current.text}
-            </p>
-            <div className="flex flex-wrap gap-2">
-              {lists.map((list, index) => (
-                <Button
-                  variant="outline"
-                  key={list.id}
-                  className="text-[12px]"
-                  onClick={() => actions.file(current, list.id)}
+      <Layout
+        header={
+          <DialogHeader
+            title="A little sorting session."
+            subtitle={
+              dumps.length
+                ? `${dumps.length} thoughts to give a home. There’s no hurry.`
+                : 'Every thought has a home. A little lighter.'
+            }
+            onOpenChange={() => close()}
+          />
+        }
+        content={
+          <LayoutContent padding={5}>
+            {current ? (
+              <VStack gap={4}>
+                <Text
+                  type="large"
+                  as="p"
+                  display="block"
+                  className="whitespace-pre-wrap wrap-anywhere"
                 >
-                  <ListDot color={list.color} />
-                  {list.label}
-                  {index < 9 && (
-                    <kbd className="ml-0.5 text-[10px] text-muted-foreground [font:inherit]">
-                      {index + 1}
-                    </kbd>
-                  )}
-                </Button>
-              ))}
-            </div>
-            <div className="flex justify-between gap-1 border-t pt-3.75 *:text-[11px]">
-              <Button variant="ghost" onClick={() => actions.remove(current)}>
-                <Trash2 />
-                Remove
-              </Button>
-              <Button variant="ghost" onClick={() => setIndex((value) => value + 1)}>
-                Skip
-                <ChevronRight />
-              </Button>
-            </div>
-          </>
-        ) : (
-          <div className="grid justify-items-center gap-4.5 p-5 text-accent-foreground">
-            <Asterisk size={48} />
-            <Button onClick={close}>Back to my space</Button>
-          </div>
-        )}
-      </DialogContent>
+                  {current.text}
+                </Text>
+                <HStack gap={2} wrap="wrap">
+                  {lists.map((list, index) => (
+                    <Button
+                      key={list.id}
+                      size="sm"
+                      label={list.label}
+                      icon={<ListDot color={list.color} />}
+                      onClick={() => actions.file(current, list.id)}
+                    >
+                      {list.label}
+                      {index < 9 && (
+                        <Text
+                          type="supporting"
+                          size="xsm"
+                          color="inherit"
+                          className="ml-1 opacity-60"
+                        >
+                          {index + 1}
+                        </Text>
+                      )}
+                    </Button>
+                  ))}
+                </HStack>
+                <Divider />
+                <HStack hAlign="between" gap={1}>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    label="Remove"
+                    icon={<Icon icon={Trash2} size="sm" color="inherit" />}
+                    onClick={() => actions.remove(current)}
+                  />
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    label="Skip"
+                    endContent={<Icon icon={ChevronRight} size="sm" color="inherit" />}
+                    onClick={() => setIndex((value) => value + 1)}
+                  />
+                </HStack>
+              </VStack>
+            ) : (
+              <VStack gap={4} hAlign="center" padding={5}>
+                <Icon icon={Asterisk} size="lg" color="accent" />
+                <Button variant="primary" label="Back to my space" onClick={close} />
+              </VStack>
+            )}
+          </LayoutContent>
+        }
+      />
     </Dialog>
   );
 }

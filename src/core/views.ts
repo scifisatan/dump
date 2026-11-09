@@ -92,12 +92,6 @@ export function byDay(dumps: Dump[]) {
   return days;
 }
 
-export const DAY_EXAMPLES = [
-  'Call the bank tomorrow',
-  'Pay rent by friday',
-  'Book the dentist in 3 days',
-];
-
 const daysFrom = (now: number, date: Date) =>
   Math.round((date.getTime() - startOfDay(now).getTime()) / 86_400_000);
 const sameYear = (date: Date, now: number) => date.getFullYear() === new Date(now).getFullYear();
@@ -154,7 +148,9 @@ export function linkHost(url: string) {
 export const searchText = (dump: Dump, notebook: Notebook) =>
   [dump.text, notebook.listLabel(dump.list), ...dump.tags.map((tag) => `#${tag}`)].join(' ');
 
-const fold = (text: string) => text.normalize('NFD').replace(/\p{M}/gu, '').toLocaleLowerCase();
+/** Lower case without accents, as `search` compares text. */
+export const fold = (text: string) =>
+  text.normalize('NFD').replace(/\p{M}/gu, '').toLocaleLowerCase();
 
 export function search(query: string, notebook: Notebook) {
   const words = fold(query).split(/\s+/).filter(Boolean);

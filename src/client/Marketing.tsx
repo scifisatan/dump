@@ -1,9 +1,19 @@
-import { lazy, Suspense, useEffect, useState, type ComponentProps } from 'react';
+import { lazy, Suspense, useEffect, useState } from 'react';
 import { ArrowRight, ArrowUp, Asterisk, Check, Cloud, Inbox, Search, Sparkles } from 'lucide-react';
-import { Link } from 'react-router-dom';
+import { AppShell } from '@astryxdesign/core/AppShell';
+import { Button } from '@astryxdesign/core/Button';
+import { Card } from '@astryxdesign/core/Card';
+import { Grid } from '@astryxdesign/core/Grid';
+import { Heading } from '@astryxdesign/core/Heading';
+import { Icon } from '@astryxdesign/core/Icon';
+import { HStack, Layout, LayoutContent, LayoutFooter, VStack } from '@astryxdesign/core/Layout';
+import { Link } from '@astryxdesign/core/Link';
+import { Section } from '@astryxdesign/core/Section';
+import { StatusDot } from '@astryxdesign/core/StatusDot';
+import { Text } from '@astryxdesign/core/Text';
+import { TopNav } from '@astryxdesign/core/TopNav';
 import { Brand } from './components/Brand';
 import { ListDot } from './components/ListDot';
-import { Button } from './components/ui/button';
 import { hasNotebook } from './registry';
 
 const loadOnboarding = () => import('./components/Onboarding');
@@ -11,39 +21,143 @@ const Onboarding = lazy(loadOnboarding);
 
 const features = [
   {
-    Icon: Inbox,
-    step: '01 — LET IT OUT',
+    icon: Inbox,
     title: 'One box. Anything goes.',
     body: 'Thoughts, links, to-dos, or a sentence that isn’t quite an idea yet. No form to fill out. Just get it down.',
   },
   {
-    Icon: Sparkles,
-    step: '02 — LET IT SORT ITSELF',
+    icon: Sparkles,
     title: 'It finds its own place.',
     body: 'Dump reads each new thought and files it into the list that fits: Ideas, Buy, Watch, or your own. Not sure? It goes to To do. Move anything yourself and your choice wins.',
   },
   {
-    Icon: Cloud,
-    step: '03 — COME BACK TO IT',
+    icon: Cloud,
     title: 'Here when you need it.',
     body: 'Search for the thought you almost forgot. Capture offline on a previously loaded device, and sync when you’re back.',
   },
 ];
 
+const exampleLists = [
+  {
+    name: 'Inbox',
+    color: '#a799b8',
+    items: [{ text: 'That film everyone keeps talking about', sorting: true }],
+  },
+  {
+    name: 'Ideas',
+    color: '#9b84d6',
+    items: [
+      { text: 'A tiny reading nook by the window', sorting: false },
+      { text: 'What if the best ideas happen on a walk?', sorting: false },
+    ],
+  },
+  {
+    name: 'Watch',
+    color: '#6395c3',
+    items: [
+      { text: 'The documentary about the lighthouse keeper', sorting: false },
+      { text: 'Rewatch the one with the train at the end', sorting: false },
+    ],
+  },
+];
+
+const arrow = <Icon icon={ArrowRight} size="sm" color="inherit" />;
+
+// Returning visitors go straight to their notebook; new ones open onboarding in place. Every
+// start button on the page carries the same label.
 function Start({
   returning,
   onStart,
-  children,
-  ...props
-}: ComponentProps<typeof Button> & { returning: boolean; onStart: () => void }) {
+  variant = 'primary',
+  size,
+}: {
+  returning: boolean;
+  onStart: () => void;
+  variant?: 'primary' | 'secondary';
+  size?: 'md' | 'lg';
+}) {
+  const label = returning ? 'Open your space' : 'Get started';
   return returning ? (
-    <Button asChild {...props}>
-      <Link to="/">{children}</Link>
-    </Button>
+    <Button href="/" label={label} variant={variant} size={size} endContent={arrow} />
   ) : (
-    <Button {...props} onClick={onStart}>
-      {children}
-    </Button>
+    <Button label={label} variant={variant} size={size} endContent={arrow} onClick={onStart} />
+  );
+}
+
+function Illustration() {
+  return (
+    <Card
+      padding={0}
+      elevation="med"
+      maxWidth={870}
+      className="mx-auto w-full overflow-hidden"
+      aria-label="Illustration of Dump with example thoughts"
+      role="img"
+    >
+      <Section dividers={['bottom']} paddingInline={6} paddingBlock={4}>
+        <HStack hAlign="between" vAlign="center">
+          <HStack gap={2} vAlign="center">
+            <Icon icon={Asterisk} size="sm" color="secondary" />
+            <Text type="supporting">My little corner</Text>
+          </HStack>
+          <Icon icon={Search} size="sm" color="secondary" />
+        </HStack>
+      </Section>
+      <VStack gap={5} padding={6} className="max-phone:p-3">
+        <Card padding={4}>
+          <HStack gap={3} vAlign="center">
+            <Icon icon={Asterisk} color="accent" />
+            <Text color="accent" size="sm">
+              What’s on your mind?
+            </Text>
+            <Icon icon={ArrowUp} color="accent" className="ml-auto" />
+          </HStack>
+        </Card>
+        <Grid columns={3} gap={4} className="max-phone:grid-cols-2 max-phone:gap-2.5">
+          {exampleLists.map((list) => (
+            <VStack gap={3} key={list.name} className="max-phone:last:hidden">
+              <HStack gap={2} vAlign="center" paddingInlineStart={1}>
+                <ListDot color={list.color} />
+                <Text type="label">{list.name}</Text>
+                <Text type="supporting" className="ml-auto">
+                  {list.items.length}
+                </Text>
+              </HStack>
+              {list.items.map((item) => (
+                <Card key={item.text} padding={3}>
+                  <VStack gap={3}>
+                    <Text size="sm">{item.text}</Text>
+                    <HStack gap={1.5} vAlign="center">
+                      {item.sorting ? (
+                        <>
+                          <StatusDot variant="accent" label="Sorting" isPulsing />
+                          <Text type="supporting" size="xsm">
+                            Sorting…
+                          </Text>
+                        </>
+                      ) : (
+                        <>
+                          <Icon icon={Sparkles} size="xsm" color="secondary" />
+                          <Text type="supporting" size="xsm">
+                            Filed by Dump
+                          </Text>
+                        </>
+                      )}
+                    </HStack>
+                  </VStack>
+                </Card>
+              ))}
+            </VStack>
+          ))}
+        </Grid>
+      </VStack>
+      <HStack gap={1.5} hAlign="center" vAlign="center" paddingBlockEnd={5}>
+        <Icon icon={Check} size="xsm" color="secondary" />
+        <Text type="supporting" size="xsm">
+          Example thoughts · your space starts empty
+        </Text>
+      </HStack>
+    </Card>
   );
 }
 
@@ -55,167 +169,91 @@ export default function Marketing() {
   }, [returning]);
   const start = { returning, onStart: () => setOnboarding(true) };
   return (
-    <div className="mx-auto max-w-320 px-15 max-tablet:px-8 max-phone:px-5.5">
-      <header className="flex h-26.25 items-center justify-between gap-5 max-phone:h-20.5">
-        <Link to="/marketing" aria-label="About Dump">
-          <Brand className="max-phone:text-[26px]" />
-        </Link>
-        <a href="#how-it-works" className="text-[11px] text-muted-foreground max-phone:hidden">
-          A little less on your mind
-        </a>
-        <Start
-          {...start}
-          variant="outline"
-          className="text-[11px] max-phone:px-2.5 max-phone:py-2 max-phone:text-[10px]"
-        >
-          {returning ? 'Open your space' : 'Get started'}
-          <ArrowRight />
-        </Start>
-      </header>
-      <main>
-        <section className="pt-20.75 pb-14.5 text-center max-phone:pt-14 max-phone:pb-10">
-          <div className="inline-flex items-center gap-2.25 text-[9px] tracking-[1.7px] text-muted-foreground max-phone:text-[7px] max-phone:tracking-[1px]">
-            <span className="size-1.5 rounded-full bg-primary" />
-            FOR THOUGHTS THAT NEED SOMEWHERE TO GO
-          </div>
-          <h1 className="mt-6.25 mb-5.5 text-[clamp(36px,4.7vw,63px)] leading-[1.15] font-[490] tracking-[-2.8px] max-phone:text-[38px] max-phone:tracking-[-1.8px]">
-            Your mind is for ideas.
-            <br />
-            <span className="text-accent-foreground">Not holding onto them.</span>
-          </h1>
-          <p className="mb-7.25 text-[14px] leading-[1.9] text-muted-foreground max-phone:text-[12px]">
-            The book someone mentioned. A half-formed idea. That link for later.
-            <br className="max-phone:hidden" /> Put it all in Dump. It files each one into the right
-            list for you.
-          </p>
-          <Start {...start} size="lg" className="px-5.5 py-6 text-[12px] has-[>svg]:px-5.5">
-            A little more headspace
-            <ArrowRight />
-          </Start>
-          <small className="mt-3.75 block text-[10px] text-muted-foreground">
-            Capture first. Dump does the sorting.
-          </small>
-        </section>
-        <section
-          className="mx-auto max-w-217.5 overflow-hidden rounded-[16px] border bg-sidebar shadow-[0_20px_70px_#51416a0b]"
-          aria-label="Illustration of Dump with example thoughts"
-        >
-          <div className="flex items-center justify-between border-b px-6 py-4.5 text-[11px] text-muted-foreground max-phone:px-4.25 max-phone:py-3.5">
-            <span className="flex items-center gap-2.25">
-              <Asterisk size={18} />
-              My little corner
-            </span>
-            <Search size={16} />
-          </div>
-          <div className="p-6.25 max-phone:p-4">
-            <div className="mb-5.75 flex items-center gap-3 rounded-[9px] border border-input bg-capture p-5 text-[13px] text-accent-foreground max-phone:px-3 max-phone:py-4 max-phone:text-[11px]">
-              <Asterisk size={24} />
-              <span>What’s on your mind?</span>
-              <ArrowUp size={20} className="ml-auto" />
-            </div>
-            <div className="grid grid-cols-3 gap-4 max-phone:grid-cols-2 max-phone:gap-2.5">
-              {[
-                {
-                  name: 'Inbox',
-                  color: '#a799b8',
-                  items: [{ text: 'That film everyone keeps talking about', sorting: true }],
-                },
-                {
-                  name: 'Ideas',
-                  color: '#9b84d6',
-                  items: [
-                    { text: 'A tiny reading nook by the window', sorting: false },
-                    { text: 'What if the best ideas happen on a walk?', sorting: false },
-                  ],
-                },
-                {
-                  name: 'Watch',
-                  color: '#6395c3',
-                  items: [
-                    { text: 'The documentary about the lighthouse keeper', sorting: false },
-                    { text: 'Rewatch the one with the train at the end', sorting: false },
-                  ],
-                },
-              ].map((column) => (
-                <div key={column.name} className="max-phone:last:hidden">
-                  <h2 className="mb-3.25 ml-1 flex items-center gap-1.75 text-[11px]">
-                    <ListDot color={column.color} />
-                    {column.name}
-                    <span className="ml-auto text-[9px] text-muted-foreground">
-                      {column.items.length}
-                    </span>
-                  </h2>
-                  {column.items.map((item) => (
-                    <div
-                      className="mb-2.5 rounded-[9px] border bg-card px-3.25 py-4.25 text-[12px] leading-[1.65] max-phone:px-2.5 max-phone:py-3 max-phone:text-[10px]"
-                      key={item.text}
-                    >
-                      {item.text}
-                      <small className="mt-3.75 flex items-center gap-1.25 text-[8px] text-muted-foreground max-phone:text-[7px]">
-                        {item.sorting ? (
-                          <>
-                            <span className="size-1.5 rounded-full bg-ring motion-safe:animate-pulse" />
-                            Sorting…
-                          </>
-                        ) : (
-                          <>
-                            <Sparkles size={9} />
-                            Filed by Dump
-                          </>
-                        )}
-                      </small>
-                    </div>
-                  ))}
-                </div>
-              ))}
-            </div>
-          </div>
-          <div className="flex items-center justify-center gap-1.5 px-5 pb-4.75 text-[9px] text-muted-foreground">
-            <Check size={12} />
-            Example thoughts · your space starts empty
-          </div>
-        </section>
-        <section
-          className="grid grid-cols-3 gap-13.75 px-6.25 pt-25 pb-21.25 max-phone:grid-cols-1 max-phone:gap-8.25 max-phone:px-2.25 max-phone:py-14.25"
-          id="how-it-works"
-        >
-          {features.map(({ Icon, step, title, body }) => (
-            <div key={step}>
-              <Icon size={23} className="mb-4.75 text-accent-foreground max-phone:mb-3.25" />
-              <span className="text-[8px] tracking-[1.4px] text-muted-foreground">{step}</span>
-              <h2 className="my-3 text-[19px] font-medium tracking-[-0.5px] max-phone:my-2">
-                {title}
-              </h2>
-              <p className="text-[12px] leading-[1.9] text-muted-foreground">{body}</p>
-            </div>
-          ))}
-        </section>
-        <section className="border-t pt-16.25 pb-15 text-center max-phone:py-11.25">
-          <Asterisk size={45} className="mx-auto text-accent-foreground" />
-          <h2 className="my-5 text-[38px] leading-[1.3] font-[490] tracking-[-1.3px] max-phone:text-[32px]">
-            Less to carry.
-            <br />
-            More room to think.
-          </h2>
-          <Start {...start}>
-            {returning ? 'Open Dump' : 'Get started'}
-            <ArrowRight />
-          </Start>
-          <p className="mt-5.75 text-[10px] leading-[1.8] text-muted-foreground">
-            Bring your own server, or keep everything on this device.
-          </p>
-        </section>
-      </main>
-      <footer className="flex items-center justify-between gap-5 border-t py-7.5 text-[10px] text-muted-foreground max-phone:flex-wrap max-phone:gap-3.75 max-phone:pb-[calc(25px+env(safe-area-inset-bottom))]">
-        <Brand className="text-[22px]" markClassName="size-7" />
-        <span className="max-phone:text-[9px]">Out of your head. Into your space.</span>
-        {returning && <Link to="/">Back to your space ↗</Link>}
-      </footer>
+    <AppShell
+      height="auto"
+      variant="wash"
+      mobileNav={false}
+      topNav={
+        <TopNav
+          label="Dump"
+          heading={
+            <Link href="/marketing" label="About Dump">
+              <Brand />
+            </Link>
+          }
+          centerContent={
+            <Link href="#how-it-works" isStandalone className="max-phone:hidden">
+              How it works
+            </Link>
+          }
+          endContent={<Start {...start} variant="secondary" />}
+        />
+      }
+    >
+      <Layout
+        height="auto"
+        contentWidth={1280}
+        content={
+          <LayoutContent padding={6}>
+            <VStack gap={10}>
+              <VStack gap={6} hAlign="center" paddingBlockStart={10}>
+                <HStack gap={2} vAlign="center">
+                  <StatusDot variant="accent" label="Dump" />
+                  <Text type="supporting" size="xsm" className="tracking-[0.15em]">
+                    FOR THOUGHTS THAT NEED SOMEWHERE TO GO
+                  </Text>
+                </HStack>
+                <Heading level={1} type="display-2" justify="center" textWrap="balance">
+                  Your mind is for ideas.{' '}
+                  <Text type="inherit" color="accent" display="block">
+                    Not holding onto them.
+                  </Text>
+                </Heading>
+                <Text type="large" color="secondary" justify="center" textWrap="balance">
+                  The book someone mentioned. A half-formed idea. That link for later. Put it all in
+                  Dump. It files each one into the right list for you.
+                </Text>
+                <Start {...start} size="lg" />
+              </VStack>
+              <Illustration />
+              <Grid columns={{ minWidth: 240, max: 3 }} gap={10} id="how-it-works">
+                {features.map(({ icon, title, body }) => (
+                  <VStack gap={3} key={title}>
+                    <Icon icon={icon} size="lg" color="accent" />
+                    <Heading level={2}>{title}</Heading>
+                    <Text color="secondary">{body}</Text>
+                  </VStack>
+                ))}
+              </Grid>
+              <Section variant="transparent" dividers={['top']} paddingBlock={10}>
+                <VStack gap={5} hAlign="center">
+                  <Icon icon={Asterisk} size="lg" color="accent" />
+                  <Heading level={2} type="display-3" justify="center" textWrap="balance">
+                    Less to carry. More room to think.
+                  </Heading>
+                  <Start {...start} />
+                  <Text type="supporting" justify="center">
+                    Bring your own server, or keep everything on this device.
+                  </Text>
+                </VStack>
+              </Section>
+            </VStack>
+          </LayoutContent>
+        }
+        footer={
+          <LayoutFooter hasDivider padding={6}>
+            <HStack gap={5} hAlign="between" vAlign="center" wrap="wrap">
+              <Brand size="compact" />
+              <Text type="supporting">Out of your head. Into your space.</Text>
+            </HStack>
+          </LayoutFooter>
+        }
+      />
       {onboarding && (
         <Suspense>
           <Onboarding onClose={() => setOnboarding(false)} />
         </Suspense>
       )}
-    </div>
+    </AppShell>
   );
 }

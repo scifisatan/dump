@@ -1,13 +1,34 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react';
-import { Check, LoaderCircle } from 'lucide-react';
+import { Check } from 'lucide-react';
+import { Button } from '@astryxdesign/core/Button';
+import { Card } from '@astryxdesign/core/Card';
+import { Code } from '@astryxdesign/core/Code';
+import { Icon } from '@astryxdesign/core/Icon';
+import { HStack, VStack } from '@astryxdesign/core/Layout';
+import { Text } from '@astryxdesign/core/Text';
+import { TextInput } from '@astryxdesign/core/TextInput';
 import { checkServer, type ServerCheck, type ServerLocation } from '../../core/connection';
-import { Button } from './ui/button';
-import { Input } from './ui/input';
 
 // `npm run dev` serves the API and this key locally (the `api` task); production builds know
 // no server and no key.
 const DEV_SERVER = import.meta.env.DEV ? 'http://localhost:6190' : '';
 const DEV_KEY = import.meta.env.DEV ? 'dump-local-development-owner-key' : '';
+
+/** Lets password managers save one key per server: a username field they can read. */
+export function ServerUsername({ server }: { server: string }) {
+  return (
+    <input
+      type="text"
+      name="username"
+      autoComplete="username"
+      value={server}
+      readOnly
+      tabIndex={-1}
+      aria-hidden="true"
+      className="sr-only"
+    />
+  );
+}
 
 export function ServerConnection({
   action = 'Connect to this server',
@@ -54,103 +75,95 @@ export function ServerConnection({
     });
 
   return (
-    <div className="space-y-3">
+    <VStack gap={3}>
       <form
-        className="space-y-3"
         onSubmit={(event) => {
           event.preventDefault();
           void check();
         }}
       >
-        <label htmlFor="server-address" className="block text-xs">
-          Server address
-        </label>
-        <div className="flex gap-2">
-          <Input
-            id="server-address"
+        <HStack gap={2} vAlign="end">
+          <TextInput
+            label="Server address"
             type="url"
-            required
             placeholder="https://dump.example.com"
             autoCapitalize="none"
-            autoCorrect="off"
-            spellCheck={false}
+            hasAutoCorrect={false}
+            hasSpellCheck={false}
+            inputMode="url"
             value={address}
-            disabled={busy}
-            className="min-w-0 flex-1 max-phone:text-base"
-            onChange={(event) => {
-              setAddress(event.target.value);
+            isDisabled={busy}
+            containerClassName="min-w-0 flex-1"
+            onChange={(value) => {
+              setAddress(value);
               setChecked(null);
               setError('');
             }}
           />
-          <Button type="submit" variant="outline" disabled={busy || !address.trim()}>
-            {busy && !checked ? <LoaderCircle className="animate-spin" /> : null}Check
-          </Button>
-        </div>
+          <Button
+            type="submit"
+            label="Check"
+            isLoading={busy && !checked}
+            isDisabled={!address.trim()}
+          />
+        </HStack>
       </form>
       {checked && (
-        <div className="space-y-3 rounded-lg border bg-muted/40 p-3 text-xs">
-          <p className="flex items-center gap-2 font-medium">
-            <Check size={15} />
-            Dump server found
-          </p>
-          <p className="break-all text-muted-foreground">{checked.baseUrl}</p>
-          <p>Automatic filing {checked.classify ? 'available' : 'off'}</p>
-          {checked.auth === 'unconfigured' ? (
-            <p className="leading-relaxed text-destructive">
-              This server has no owner key yet. Set <code>OWNER_KEY</code> on it, redeploy, then
-              check again.
-            </p>
-          ) : (
-            <form
-              className="space-y-2"
-              onSubmit={(event) => {
-                event.preventDefault();
-                void connect(checked);
-              }}
-            >
-              {/* Lets password managers save one key per server. */}
-              <input
-                type="text"
-                name="username"
-                autoComplete="username"
-                value={checked.baseUrl}
-                readOnly
-                tabIndex={-1}
-                aria-hidden="true"
-                className="sr-only"
-              />
-              <label htmlFor="owner-key" className="block">
-                Owner key
-              </label>
-              <Input
-                id="owner-key"
-                type="password"
-                name="password"
-                autoComplete="current-password"
-                required
-                value={key}
-                disabled={busy}
-                className="max-phone:text-base"
-                onChange={(event) => {
-                  setKey(event.target.value);
-                  setError('');
+        <Card variant="muted" padding={3}>
+          <VStack gap={3}>
+            <HStack gap={2} vAlign="center">
+              <Icon icon={Check} size="sm" color="success" />
+              <Text weight="medium">Dump server found</Text>
+            </HStack>
+            <Text type="supporting" wordBreak="break-all">
+              {checked.baseUrl}
+            </Text>
+            <Text type="supporting">Automatic filing {checked.classify ? 'available' : 'off'}</Text>
+            {checked.auth === 'unconfigured' ? (
+              <Text color="inherit" className="text-error">
+                This server has no owner key yet. Set <Code size="inherit">OWNER_KEY</Code> on it,
+                redeploy, then check again.
+              </Text>
+            ) : (
+              <form
+                onSubmit={(event) => {
+                  event.preventDefault();
+                  void connect(checked);
                 }}
-              />
-              {notice}
-              <Button type="submit" disabled={busy || !key}>
-                {busy ? <LoaderCircle className="animate-spin" /> : null}
-                {action}
-              </Button>
-            </form>
-          )}
-        </div>
+              >
+                <VStack gap={3}>
+                  <ServerUsername server={checked.baseUrl} />
+                  <TextInput
+                    label="Owner key"
+                    type="password"
+                    htmlName="password"
+                    autoComplete="current-password"
+                    value={key}
+                    isDisabled={busy}
+                    onChange={(value) => {
+                      setKey(value);
+                      setError('');
+                    }}
+                  />
+                  {notice}
+                  <Button
+                    type="submit"
+                    variant="primary"
+                    label={action}
+                    isLoading={busy}
+                    isDisabled={!key}
+                  />
+                </VStack>
+              </form>
+            )}
+          </VStack>
+        </Card>
       )}
       {error && (
-        <p role="alert" className="text-xs leading-relaxed text-destructive">
+        <Text role="alert" type="supporting" color="inherit" className="text-error">
           {error}
-        </p>
+        </Text>
       )}
-    </div>
+    </VStack>
   );
 }

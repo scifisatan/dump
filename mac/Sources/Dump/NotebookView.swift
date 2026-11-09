@@ -288,9 +288,7 @@ private struct DumpList: View {
         ForEach(sections) { section in
           Section {
             if section.today {
-              TodayHeading(summary: section.title, quiet: section.quiet, examples: snapshot.examples) {
-                state.draft = $0
-              }
+              TodayHeading(summary: section.title, quiet: section.quiet)
                 .id(Self.todayID)
             }
             ForEach(section.items) { item in
@@ -392,8 +390,6 @@ private struct DumpList: View {
 private struct TodayHeading: View {
   let summary: String
   let quiet: Bool
-  let examples: [String]
-  let fill: (String) -> Void
 
   var body: some View {
     VStack(alignment: .leading, spacing: 2) {
@@ -402,24 +398,15 @@ private struct TodayHeading: View {
       Text(summary).font(.callout).foregroundStyle(.secondary)
       if quiet {
         VStack(spacing: 6) {
+          Image(systemName: "sun.max")
+            .font(.title3)
+            .foregroundStyle(.secondary)
           Text("A clear day.").font(.headline)
-          Text("Nothing due and nothing dumped yet. Give a dump a day, and it waits for you here when the day comes.")
+          Text("Nothing due today. Give a dump a day and it waits here.")
             .font(.callout)
             .foregroundStyle(.secondary)
             .multilineTextAlignment(.center)
             .fixedSize(horizontal: false, vertical: true)
-          HStack(spacing: 8) {
-            ForEach(examples, id: \.self) { example in
-              Button {
-                fill(example)
-              } label: {
-                Label(example, systemImage: "calendar")
-              }
-              .controlSize(.small)
-              .help("Put this in the composer")
-            }
-          }
-          .padding(.top, 6)
         }
         .frame(maxWidth: .infinity)
         .padding(.vertical, 18)

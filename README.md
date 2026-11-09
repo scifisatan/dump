@@ -22,7 +22,7 @@ Open the web app and choose **Get started**. Then either connect your server (en
 | Search | Ctrl/Cmd+K, or the search button beside Settings. Search also opens Today, Done and your lists. |
 | Sort the inbox | `1`–`9` pick a list, Right Arrow skips, Backspace removes. |
 | Done / remove | Final: there's no undo. |
-| Settings | Switch servers, sign in again after the owner key changes, and export or import a JSON backup. |
+| Settings | Pick Light, Dark or System, switch servers, sign in again after the owner key changes, and export or import a JSON backup. |
 
 A device-only notebook never leaves the browser. Safari clears site data after seven days without a visit unless the app is installed to the home screen, so install it and export backups.
 
@@ -93,6 +93,7 @@ Open http://localhost:6191. This runs the web client (port 6191) and a local API
 
 - `npm run check` runs the format check, lint, unit tests, type checks and builds.
 - `npm run test:e2e` runs the end-to-end tests. Run `npx playwright install chromium` once first.
+- The web app is built with the [Astryx](https://github.com/meta/astryx) design system and a local `dump` theme. `npx astryx component <Name>` prints a component's props; [docs/web-client.md § Design system](docs/web-client.md#design-system) covers the theme and its rebuild step.
 
 [docs/architecture.md](docs/architecture.md) explains how it all fits together and why. Coding agents start at [AGENTS.md](AGENTS.md).
 
