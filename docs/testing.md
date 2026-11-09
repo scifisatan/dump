@@ -40,7 +40,7 @@ Owns `cli/` (the dump CLI), `scripts/verify.mjs`, `tests/` and `playwright.confi
   - The built client on 6194, served by `wrangler dev --config wrangler.client.jsonc` so that `public/_headers` (the CSP) applies.
 - The `setup` project (`connect.setup.ts`) onboards once and saves the session to `test-results/connected.json`. The other tests reuse that saved notebook. The connection tests start as new visitors.
 - E2e servers never call Jev. Tests that need filing stand in for `/api/classify` with `fakeJev` in `app.spec.ts`.
-- Shared helpers (`capture`, `connectServer`, `startOnboarding`) are in `tests/e2e/servers.ts`.
+- Shared helpers (`capture`, `connectServer`, `startOnboarding`) are in `tests/e2e/servers.ts`. `deviceOnly` opens an empty device-only notebook in its own context, for tests that need to control everything on screen (scroll position, empty views).
 
 ## When a test fails
 

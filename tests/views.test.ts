@@ -1,8 +1,10 @@
 import { describe, expect, it } from 'vite-plus/test';
 import type { Snapshot } from '../src/core/client';
 import { DEFAULT_LISTS, makeDump, type Dump } from '../src/shared/schema';
+import { isOverdue, parseDue } from '../src/shared/due';
 import {
   byDay,
+  DAY_EXAMPLES,
   dayLabel,
   dueLabel,
   dumpsIn,
@@ -13,7 +15,7 @@ import {
   search,
   timeLabel,
 } from '../src/core/views';
-import { homeRows, rows } from '../mobile/src/views';
+import { homeRows, placeTitle, rows } from '../mobile/src/views';
 
 const day = (date: string, hour: number) =>
   new Date(`${date}T${String(hour).padStart(2, '0')}:00:00`).getTime();
@@ -100,6 +102,28 @@ describe('notebook views', () => {
     ]);
     const today = rows.find((row) => row.type === 'today');
     expect(today?.type === 'today' && today.summary).not.toContain('due today');
+  });
+
+  it('offers example dumps for an empty Today that each name a day', () => {
+    const now = day('2026-10-17', 9);
+    for (const example of DAY_EXAMPLES) expect(parseDue(example, now)).not.toBeNull();
+  });
+
+  it('names each view, and shows home for a list that no longer exists', () => {
+    const book = notebook(snapshot([]));
+    expect(placeTitle({ kind: 'home' }, book)).toBe('Home');
+    expect(placeTitle({ kind: 'done' }, book)).toBe('Done');
+    expect(placeTitle({ kind: 'list', id: 'ideas' }, book)).toBe('Ideas');
+    expect(placeTitle({ kind: 'list', id: 'gone' }, book)).toBe('Home');
+  });
+
+  it('marks an open dump overdue only after its day', () => {
+    const now = day('2026-10-17', 9);
+    const due = (date: string) =>
+      makeDump('pay rent', crypto.randomUUID(), now, DEFAULT_LISTS, null, date);
+    expect(isOverdue(due('2026-10-16'), now)).toBe(true);
+    expect(isOverdue(due('2026-10-17'), now)).toBe(false);
+    expect(isOverdue({ ...due('2026-10-16'), done: true }, now)).toBe(false);
   });
 
   it('names a due day from today: Today, Tomorrow, a weekday this week, else a date', () => {

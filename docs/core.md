@@ -43,6 +43,7 @@ Owns `src/shared/` and `src/core/`. These are the platform-independent parts tha
 - `notebook(snapshot)` leaves out tombstones and splits the dumps into open, done and unfiled. Unfiled is what Sort inbox walks through: open dumps with no list that Jev isn't sorting. → `tests/views.test.ts` "gives Today a summary on every client"
 - `home` is `agenda` with Today's section labels (Overdue, Due today, Coming up, Dumped today) and Today's heading: the date and what is due ("Saturday, October 17 · 1 overdue · Nothing due today"), or the date alone when Today is quiet. → same test
 - `needsAttention` is when Settings carries a mark: this device cannot save, or sync is offline, paused or signed out. → `tests/views.test.ts` "needs attention"
+- `DAY_EXAMPLES` are the example dumps an empty Today offers; each names a day. → `tests/views.test.ts` "offers example dumps for an empty Today"
 - `byDay`, `dayLabel`, `dueLabel`, `timeLabel`, `longDate` and `linkHost` group and name days, due days and times in the device's locale. → `tests/views.test.ts` "names a due day from today", "names capture days and times"
 - `search` finds dumps that contain every word of a query across their text, list and tags, ignoring case and accents; the phone and the Mac use it. The web app's ⌘K palette ranks the same `searchText` with cmdk's fuzzy filter. → `tests/views.test.ts` "leaves out removed dumps and finds every word"
 

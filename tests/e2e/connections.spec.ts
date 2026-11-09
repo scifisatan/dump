@@ -149,6 +149,9 @@ test('a device whose key stops working is signed out, keeps its notes, and signs
   const text = `rotated key ${crypto.randomUUID().slice(0, 8)}`;
   await onboard(page);
   await capture(page, `!ideas ${text}`);
+  // Reload only once this device has saved, or the capture is lost.
+  await expect(page.getByRole('article').getByText(text, { exact: true })).toBeVisible();
+  await expect(page.getByRole('status')).toHaveText('Saved · local development');
   // Stands in for the owner rotating OWNER_KEY: this device's saved key no longer matches.
   await page.evaluate(() => {
     for (const name of Object.keys(localStorage))

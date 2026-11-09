@@ -1,4 +1,4 @@
-import { expect, type Page } from '@playwright/test';
+import { expect, type Browser, type BrowserContextOptions, type Page } from '@playwright/test';
 
 export const CLIENT = 'http://localhost:6194';
 export const HOME = 'http://localhost:6192';
@@ -40,4 +40,18 @@ export async function onboard(page: Page, address = HOME) {
   await connectServer(page, address);
   await expect(page.getByRole('textbox', { name: 'Capture a thought' })).toBeEnabled();
   await expect(page.getByRole('status')).toContainText('Saved · local development');
+}
+
+// An empty notebook on this device only, so a test controls everything on screen. Close it with
+// page.context().close().
+export async function deviceOnly(browser: Browser, options: BrowserContextOptions = {}) {
+  const context = await browser.newContext({
+    storageState: { cookies: [], origins: [] },
+    ...options,
+  });
+  const page = await context.newPage();
+  await startOnboarding(page);
+  await page.getByRole('button', { name: /Just this device/ }).click();
+  await expect(page.getByRole('textbox', { name: 'Capture a thought' })).toBeEnabled();
+  return page;
 }

@@ -26,16 +26,18 @@ Owns `mobile/`. For how a user installs and uses the app, read README § Phone a
 
 ## Behavior
 
-- The first launch opens a notebook on this phone right away, as the Mac does, and Settings greets the owner.
-- The app opens on home, the root of the stack: the Dump mark at the top left, and Search and Settings at the top right of every view. Settings carries a badge (iOS 26) or a dot (Android) while sync needs attention (offline, paused, signed out, or unable to save); the Settings screen shows the state and Retry. Search searches everything and, before you type, lists the lists (with New List) and Done; choosing one replaces Search, so going back returns home. A row's list name opens that list.
-- Each view is a list with the newest at the bottom and a composer pinned above the keyboard. Home ends in Today, just above the composer, with older days above it and a link to Done at the very top. An empty Today says "A clear day." and offers example dumps with days that fill the composer. → `tests/views.test.ts` "marks an empty Today as quiet"
-- A view opens at the bottom, or with Today's heading at the top when Today is taller than the screen. Lists and Done are grouped by day. A list view captures into its list, and a `!list` prefix wins. Done has no composer. → no test: nothing runs the screens.
-- Return adds a line; the send button saves and keeps the keyboard up. It saves one frame after the press, because iOS applies a pending autocorrection as the tap ends and that change reaches JS just after the press: the dump gets the corrected word and the day it names, and the correction can't refill the cleared composer. To check it in the simulator, use a different typo for each try, because iOS learns a saved typo and stops correcting it. → no test: checked by hand in the simulator.
-- Days: the composer shows the day it read from the draft, and its × saves without it. A dated row shows its day, red when overdue; tapping it opens Pick a Day, a sheet where a day is typed as in a dump ("friday", "oct 24") and read by the same parser, with Today, Tomorrow and Clear Date. The long-press menu has the same choices.
-- Rows: the circle marks done. A long press opens every action (open link, done, date, move, copy, remove). Swiping right marks done; swiping left reveals Remove, which needs a tap because there is no undo.
-- Native menus come from `@react-native-menu/menu`. Expo Go doesn't include it, so there `src/menu.tsx` opens the same actions in an action sheet.
-- The web app address in Settings applies as it is typed, so a server checked next already sees it.
-- Going to the background saves the notebook. Sync resumes when the app returns to the foreground or the network comes back.
+The screens draw `src/views.ts`. Nothing runs the screens themselves; "by hand" means in the simulator.
+
+- The first launch opens a notebook on this phone right away, and Settings greets the owner. → no test: by hand.
+- Home is the root of the stack: the Dump mark top left, Search and Settings top right. Settings carries a badge (iOS 26) or a dot (Android) while sync needs attention, and its screen shows the state and Retry. → `tests/views.test.ts` "needs attention when"
+- Search finds dumps and, before you type, lists the lists (with New List) and Done; choosing one replaces Search, so back returns home. A row's list name opens that list; a gone list shows home. → `tests/views.test.ts` "finds every word", "names each view"
+- Views read bottom up above a composer pinned over the keyboard, grouped by day; Done has no composer. Home ends in Today under older days and a Done link; an empty Today says "A clear day." and offers example dumps. → `tests/views.test.ts` "orders rows for an inverted list", "ends home in Today", "marks an empty Today as quiet"
+- A view opens at the bottom, or at Today's heading when Today is taller than the screen. → no test: by hand.
+- Return adds a line; send saves and keeps the keyboard up. It saves one frame after the press, because iOS applies a pending autocorrection as the tap ends and that change reaches JS just after: the dump gets the corrected word and its day, and the correction can't refill the cleared composer. Use a different typo for each try, because iOS stops correcting a saved typo. → no test: by hand.
+- The composer shows the day it read from the draft, and its × saves without it. A dated row shows its day, red when overdue; tapping it opens Pick a Day, which reads a typed day with the capture parser and offers Today, Tomorrow and Clear Date, as the long-press menu does. → `tests/views.test.ts` "marks an open dump overdue", "names a due day from today", `tests/domain.test.ts` "reads the day a capture names"
+- The circle marks done; a long press opens every action. Swiping right marks done; swiping left reveals Remove, which needs a tap because there is no undo. → no test: by hand.
+- Native menus come from `@react-native-menu/menu`. Expo Go lacks it, so there `src/menu.tsx` opens the same actions in an action sheet. → no test: by hand in Expo Go.
+- The web app address in Settings applies as typed. Going to the background saves; sync resumes on return to the foreground or when the network comes back. → no test: by hand.
 
 ## Build and check
 
