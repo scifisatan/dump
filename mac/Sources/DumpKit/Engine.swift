@@ -18,7 +18,7 @@ public final class Engine {
 
   private let context: JSContext
   private let directory: URL
-  private let settings: UserDefaults
+  private let settings: Settings
   private let keys: OwnerKeys
   private let writer = DispatchQueue(label: "np.com.abishrestha.dump.notebook-writer")
   private var timers: [Int: DispatchWorkItem] = [:]
@@ -28,7 +28,7 @@ public final class Engine {
   private var changePending = false
   private var exception: String?
 
-  public init(directory: URL, settings: UserDefaults = .standard, keys: OwnerKeys = OwnerKeys()) throws {
+  public init(directory: URL, settings: Settings = UserDefaults.standard, keys: OwnerKeys = OwnerKeys()) throws {
     self.directory = directory
     self.settings = settings
     self.keys = keys
