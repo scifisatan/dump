@@ -13,11 +13,12 @@ These are the anti-slop principles from dmmulroy/anti-slop. They are vendored an
 
 ## Layers
 
-- `src/core` and `src/shared` import no React and no Worker types, and use only the web APIs that `mac/engine/polyfills.ts` installs and `mobile/src/runtime.ts` provides. That rules out `window`, `document`, `localStorage`, `indexedDB` and `navigator`. Because `mac/engine/tsconfig.json` includes the DOM types, the type checker won't catch this, so the reviewer has to.
-- Browser code imports `src/shared`, never anything under `src/server/`.
+- `src/core` and `src/shared` import no React, Node, Worker or client code, and use only the web APIs that `mac/engine/polyfills.ts` installs and `mobile/src/runtime.ts` provides. Lint (`overrides` in `vite.config.ts`) rejects those imports and the browser globals (`window`, `document`, `localStorage`, `sessionStorage`, `indexedDB`, `navigator`, `location`). It can't see a newer web API that JavaScriptCore or Hermes lacks, so that is the reviewer's.
+- Clients import `src/shared`, never anything under `src/server/`. Lint rejects it.
 - Only the command functions in `src/core/client.ts` write dumps or lists. A store write anywhere else is a finding.
 - Swift calls the engine (`mac/engine/index.ts`) for notebook behavior. Notebook logic reimplemented in Swift is a finding.
-- The phone app calls the core's commands. Notebook logic reimplemented under `mobile/` is a finding.
+- The phone app and the dump CLI call the core's commands. Notebook logic reimplemented under `mobile/` or `cli/` is a finding.
+- A check or target added without a matching change to `scripts/verify.mjs` is a finding.
 
 ## Tests
 
@@ -31,11 +32,12 @@ These are the anti-slop principles from dmmulroy/anti-slop. They are vendored an
 
 ## Docs stay true
 
-These match "Keeping docs true" in AGENTS.md.
+These match "Keeping docs true" in AGENTS.md. `tests/docs.test.ts` already fails on a named test, link, heading or code path that doesn't exist, and on a source file missing from the code map; the reviewer checks the rest.
 
 - For each changed path, find the row in AGENTS.md's docs map that owns it. If the diff changes a rule, command, gotcha or behavior that the owning doc (or README) describes, and that doc isn't updated in the same diff, it's a finding.
 - A doc line the diff makes false is a finding, wherever it is.
 - A file under `src/`, `mac/` or `mobile/` that is added, removed or renamed without a matching update to the code map in `docs/architecture.md` is a finding.
 - A fact restated in a second file, instead of linked to its owning doc, is a finding.
-- A new rule in a doc needs a test named next to it, or a note that no test can check it.
+- A new rule in a doc needs a test named next to it, or `→ no test:` with why and how it was checked by hand.
+- A change that crosses a seam in [docs/architecture.md § Code layers and seams](docs/architecture.md#code-layers-and-seams) without updating or checking the far side is a finding.
 - History words in docs ("now", "former", "first pass", "no longer") are a finding: the line should state the present.

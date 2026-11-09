@@ -6,14 +6,14 @@ Owns `src/client/`, `index.html`, `public/` and `wrangler.client.jsonc`. For wha
 
 - React with React Router, Tailwind v4 (tokens and custom variants in `src/client/styles.css`), shadcn/Radix primitives in `components/ui/`, cmdk search, next-themes (Light, Dark, System), lucide-react, sonner, vite-plugin-pwa. Vite builds the client to `dist/client/`.
 - `main.tsx` picks the screen and lazy-loads `App.tsx` (the notebook) or `Marketing.tsx` (the landing page). `store.ts` runs the core's session for the active profile, whose switches reload the page, and exposes `useDumpStore`. `browser-platform.ts` is the browser adapter: IndexedDB, WebSocket, BroadcastChannel and device events. `profiles.ts` keeps the core's notebook registry and the owner keys in localStorage. `registry.ts` answers whether this browser has a notebook.
-- `App.tsx` is large (about 770 lines): the shell, top bar, views and composer are all in it. Grep for the piece you need instead of reading the whole file.
+- `App.tsx` is the client's largest file: the shell, top bar, views and composer are all in it. Grep for the piece you need instead of reading the whole file.
 
 ## Views and look
 
 - There is no sidebar. The top bar holds the logo (the badge alone on a phone), Sort inbox when unfiled dumps wait for the owner, and search and Settings grouped together. Sync shows only when it needs attention (offline, paused, signed out, or unable to save): its state beside Settings, with Retry or Sign in, and a dot on the gear. Screen readers always hear the state through the same `role="status"` element. → e2e `app.spec.ts` "two devices merge offline captures" Lists, Done, New list and Today open from search (⌘K); a card's list name opens its list. A list or Done shows a back arrow, its name and its count in place of the logo. → e2e `app.spec.ts` "mobile layout fits and lists open from search"
 - There are three kinds of view: home (`/`, every open dump in one list), one view per list, and Done. A path that names no view shows home. Each view is a compact list of dumps with the newest at the bottom and a composer pinned below like a chat. Done has no composer. An empty list or Done centers a larger composer instead of pinning it. Home always ends in Today; an empty Today says "A clear day." and offers example dumps with days, each of which fills the composer. → e2e `connections.spec.ts` "a device-only notebook never contacts a server"
 - Home ends in Today, just above the composer, grouped as [core.md § Data model](core.md#data-model) describes: older undated dumps by the day they were captured, a "done" link at the very top, then Today's heading and its sections, each shown only when it has dumps. → e2e `app.spec.ts` "Today shows what is overdue"
-- Home opens with Today's heading at the top of the screen when Today is taller than the screen, and at the bottom otherwise. The other views open at their newest dump. New dumps scroll into view. No test checks the opening scroll position.
+- Home opens with Today's heading at the top of the screen when Today is taller than the screen, and at the bottom otherwise. The other views open at their newest dump. New dumps scroll into view. → no test: the e2e tests don't measure scroll position.
 - While you type, the composer shows the day it read from the draft (see [core.md § Data model](core.md#data-model)), and its × sends the dump without a date. A dated dump shows its day on its card, red when overdue. The day and the card's menu both offer Today, Tomorrow, Pick a day… and Clear date.
 - Backups (export and import) live in Settings. Clear done and Delete list both need a confirm click.
 - Keep the lime asterisk badge, the off-white and charcoal surfaces, and the lime actions. Each list's color is only a category accent, not a theme.
@@ -35,8 +35,7 @@ The static host sends a CSP from `public/_headers` that allows only the app's ow
 - `useVisualViewport` (`lib/viewport.ts`) writes `--vv-height` and `--vv-top` on the root element, and sets `data-keyboard` while the keyboard is open (the Tailwind `keyboard:` variant). On touch devices it predicts the height on focus and blur from the last measured keyboard height, which it remembers in localStorage. That lets the layout move with the keyboard; it then corrects to the real measurement. Pinch zoom is ignored.
 - The height transition uses iOS's keyboard curve (250ms), a deliberate exception to the motion rule.
 - Composer submit buttons call `preventDefault` on pointerdown, so tapping them keeps focus and the keyboard open. `html` and `body` disable overscroll.
-- A desktop browser can't raise an iOS keyboard. To simulate one, set `--vv-height` and `data-keyboard` on `document.documentElement` by hand. In a hidden preview pane, CSS transitions freeze at time 0; step through them with `document.getAnimations()` and `currentTime`.
-- This has not been checked on a real phone yet.
+- A desktop browser can't raise an iOS keyboard. To simulate one, set `--vv-height` and `data-keyboard` on `document.documentElement` by hand. In a hidden preview pane, CSS transitions freeze at time 0; step through them with `document.getAnimations()` and `currentTime`. → no test: the keyboard handling hasn't been checked on a real phone.
 
 ## Loading screen
 
