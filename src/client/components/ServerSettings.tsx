@@ -43,7 +43,6 @@ function SignIn({ server }: { server: ServerLocation }) {
             type="password"
             htmlName="password"
             autoComplete="current-password"
-            isRequired
             value={key}
             isDisabled={busy}
             containerClassName="min-w-0 flex-1"

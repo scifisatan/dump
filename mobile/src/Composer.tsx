@@ -1,5 +1,5 @@
 import * as Haptics from 'expo-haptics';
-import { useImperativeHandle, useRef, useState, type Ref } from 'react';
+import { useRef, useState } from 'react';
 import { Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 import Animated, { useAnimatedStyle } from 'react-native-reanimated';
 import { useReanimatedKeyboardAnimation } from 'react-native-keyboard-controller';
@@ -11,18 +11,14 @@ import { useSession } from './notebook';
 import { useColors } from './theme';
 import { Icon, icons, ListDot } from './ui';
 
-export type ComposerHandle = { fill(text: string): void };
-
 export function Composer({
   book,
   list,
   ready,
-  ref,
 }: {
   book: Notebook;
   list: string | null;
   ready: boolean;
-  ref?: Ref<ComposerHandle>;
 }) {
   const { client } = useSession();
   const colors = useColors();
@@ -32,13 +28,6 @@ export function Composer({
     latest.current = text;
     setDraft(text);
   };
-  const input = useRef<TextInput>(null);
-  useImperativeHandle(ref, () => ({
-    fill(text) {
-      type(text);
-      input.current?.focus();
-    },
-  }));
   const [note, setNote] = useState<{ text: string; error?: boolean } | null>(null);
   const [skipped, setSkipped] = useState<string | null>(null);
   const prefix = listPrefix(draft, book.lists);
@@ -113,7 +102,6 @@ export function Composer({
       ) : null}
       <View style={[styles.field, { backgroundColor: colors.card, borderColor: colors.border }]}>
         <TextInput
-          ref={input}
           value={draft}
           onChangeText={(text) => {
             type(text);

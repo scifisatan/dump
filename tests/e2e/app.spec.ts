@@ -366,8 +366,21 @@ test('dialogs center, restore focus, and theme preference survives reload', asyn
   await expect(page.getByRole('combobox', { name: 'Search dumps' })).toBeFocused();
   await page.keyboard.press('Escape');
   await expect(search).toBeFocused();
-  // Standard dialogs center; the search palette sits near the top, as Astryx places palettes.
-  await page.getByRole('button', { name: 'Settings', exact: true }).click();
+  // The palette is pinned near the top, and Enter right after typing opens the first match.
+  await search.click();
+  const palette = page.getByRole('dialog', { name: 'Find something in your space' });
+  await page.keyboard.type('Settings');
+  await expect
+    .poll(() =>
+      palette.evaluate((element) => {
+        const rect = element.getBoundingClientRect();
+        return rect.y + rect.height / 2 < innerHeight / 2 - 40;
+      }),
+    )
+    .toBe(true);
+  await page.keyboard.press('Enter');
+  await expect(palette).toBeHidden();
+  // Standard dialogs center.
   const dialog = page.getByRole('dialog');
   await expect(dialog).toBeVisible();
   // Astryx dialogs ease in, so wait until the dialog settles in the middle.
@@ -440,7 +453,7 @@ test('marketing is separate from notebook initialization and preserves the origi
   await page.setViewportSize({ width: 390, height: 844 });
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
   await page.screenshot({ path: 'test-results/marketing-mobile.png', fullPage: true });
-  await page.getByRole('link', { name: 'Open your space' }).click();
+  await page.getByRole('link', { name: 'Open your space' }).first().click();
   await expect(page.getByRole('textbox', { name: 'Capture a thought' })).toBeEnabled();
   await expect(page.getByRole('progressbar', { name: 'Opening Dump' })).toBeHidden();
   await context.close();

@@ -86,7 +86,6 @@ export function ServerConnection({
           <TextInput
             label="Server address"
             type="url"
-            isRequired
             placeholder="https://dump.example.com"
             autoCapitalize="none"
             hasAutoCorrect={false}
@@ -139,7 +138,6 @@ export function ServerConnection({
                     type="password"
                     htmlName="password"
                     autoComplete="current-password"
-                    isRequired
                     value={key}
                     isDisabled={busy}
                     onChange={(value) => {

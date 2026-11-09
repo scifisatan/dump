@@ -81,7 +81,7 @@ export function DuePicker({
           <LayoutContent padding={5}>
             <form onSubmit={submit}>
               <VStack gap={4}>
-                <DateInput label="Day" value={value} onChange={setValue} isRequired />
+                <DateInput label="Day" value={value} onChange={setValue} />
                 <Button type="submit" variant="primary" label="Save day" isDisabled={!value} />
               </VStack>
             </form>

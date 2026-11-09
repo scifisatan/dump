@@ -30,4 +30,14 @@ export const dumpTheme = defineTheme({
     },
     code: { family: 'SF Mono', fallbacks: 'ui-monospace, Menlo, Monaco, Consolas, monospace' },
   },
+  components: {
+    // Matcha rounds every card like a page (42px), which turns short cards into pills. Cards use
+    // the container radius; buttons stay full pills, as in Matcha.
+    card: {
+      base: {
+        borderRadius: 'var(--radius-container)',
+        padding: 'var(--spacing-3)',
+      },
+    },
+  },
 });

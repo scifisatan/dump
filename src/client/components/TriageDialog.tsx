@@ -96,7 +96,7 @@ export function TriageDialog({
                       {index < 9 && (
                         <Text
                           type="supporting"
-                          size="2xs"
+                          size="xsm"
                           color="inherit"
                           className="ml-1 opacity-60"
                         >

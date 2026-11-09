@@ -42,6 +42,7 @@ export const icons = {
   search: { ios: 'magnifyingglass', android: 'search' },
   close: { ios: 'xmark', android: 'close' },
   calendar: { ios: 'calendar', android: 'calendar_today' },
+  sun: { ios: 'sun.max', android: 'light_mode' },
 } satisfies Record<string, IconName>;
 
 export function Icon({

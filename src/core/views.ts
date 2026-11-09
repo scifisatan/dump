@@ -92,12 +92,6 @@ export function byDay(dumps: Dump[]) {
   return days;
 }
 
-export const DAY_EXAMPLES = [
-  'Call the bank tomorrow',
-  'Pay rent by friday',
-  'Book the dentist in 3 days',
-];
-
 const daysFrom = (now: number, date: Date) =>
   Math.round((date.getTime() - startOfDay(now).getTime()) / 86_400_000);
 const sameYear = (date: Date, now: number) => date.getFullYear() === new Date(now).getFullYear();

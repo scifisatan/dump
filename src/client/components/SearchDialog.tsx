@@ -42,6 +42,9 @@ function sourceOf(entries: Entry[], book: Notebook): SearchSource<Entry> {
 }
 
 // Opens on the query a tag click asked for, then keeps the app's copy of the query current.
+// Astryx clears the highlight on every query, so Enter would do nothing until an arrow key or the
+// pointer picked a row. A typed query highlights its first match instead, and Enter before the
+// search settles opens that first match.
 function QueryInput({
   query,
   onQueryChange,
@@ -55,6 +58,12 @@ function QueryInput({
     // Only the opening query; typing goes through onValueChange.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+  const first = palette?.selectableItems.find((item) => !item.disabled);
+  const unhighlighted = !!palette?.search && !palette.isBusy && palette.highlightedIndex < 0;
+  useEffect(() => {
+    if (unhighlighted && first)
+      palette?.setHighlightedIndex(palette.selectableItems.indexOf(first));
+  }, [unhighlighted, first, palette]);
   return (
     <CommandPaletteInput
       label="Search dumps"
@@ -62,6 +71,13 @@ function QueryInput({
       onValueChange={(value) => {
         onQueryChange(value);
         palette?.setSearch(value);
+      }}
+      onKeyDown={(event) => {
+        if (event.key !== 'Enter' || event.nativeEvent.isComposing) return;
+        if (!palette?.search || palette.highlightedIndex >= 0 || !first) return;
+        event.preventDefault();
+        palette.selectItem(first.value);
+        palette.onClose();
       }}
     />
   );
@@ -167,6 +183,9 @@ export function SearchDialog({
       onOpenChange={onOpenChange}
       label="Find something in your space"
       width={620}
+      // Astryx centers dialogs; a palette pinned near the top keeps its query field still while
+      // the results grow and shrink under it.
+      className="mt-[12dvh] mb-auto"
       searchSource={source}
       input={<QueryInput query={initialQuery} onQueryChange={onQueryChange} />}
       emptySearchText="No matches yet. Try a shorter phrase."
@@ -178,7 +197,7 @@ export function SearchDialog({
           <VStack gap={0.5} className="min-w-0">
             <Text maxLines={1}>{item.label}</Text>
             {item.auxiliaryData.detail && (
-              <Text type="supporting" size="2xs">
+              <Text type="supporting" size="xsm">
                 {item.auxiliaryData.detail}
               </Text>
             )}

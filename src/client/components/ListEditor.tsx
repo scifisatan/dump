@@ -69,7 +69,6 @@ export function ListEditor({
                   label="List name"
                   value={label}
                   onChange={(value) => setLabel(value.slice(0, 40))}
-                  isRequired
                   placeholder="Books, weekend plans, someday…"
                   status={error ? { type: 'error', message: error } : undefined}
                 />

@@ -22,19 +22,16 @@ const Onboarding = lazy(loadOnboarding);
 const features = [
   {
     icon: Inbox,
-    step: '01 — LET IT OUT',
     title: 'One box. Anything goes.',
     body: 'Thoughts, links, to-dos, or a sentence that isn’t quite an idea yet. No form to fill out. Just get it down.',
   },
   {
     icon: Sparkles,
-    step: '02 — LET IT SORT ITSELF',
     title: 'It finds its own place.',
     body: 'Dump reads each new thought and files it into the list that fits: Ideas, Buy, Watch, or your own. Not sure? It goes to To do. Move anything yourself and your choice wins.',
   },
   {
     icon: Cloud,
-    step: '03 — COME BACK TO IT',
     title: 'Here when you need it.',
     body: 'Search for the thought you almost forgot. Capture offline on a previously loaded device, and sync when you’re back.',
   },
@@ -66,20 +63,20 @@ const exampleLists = [
 
 const arrow = <Icon icon={ArrowRight} size="sm" color="inherit" />;
 
-// Returning visitors go straight to their notebook; new ones open onboarding in place.
+// Returning visitors go straight to their notebook; new ones open onboarding in place. Every
+// start button on the page carries the same label.
 function Start({
   returning,
   onStart,
-  label,
   variant = 'primary',
   size,
 }: {
   returning: boolean;
   onStart: () => void;
-  label: string;
   variant?: 'primary' | 'secondary';
   size?: 'md' | 'lg';
 }) {
+  const label = returning ? 'Open your space' : 'Get started';
   return returning ? (
     <Button href="/" label={label} variant={variant} size={size} endContent={arrow} />
   ) : (
@@ -134,14 +131,14 @@ function Illustration() {
                       {item.sorting ? (
                         <>
                           <StatusDot variant="accent" label="Sorting" isPulsing />
-                          <Text type="supporting" size="2xs">
+                          <Text type="supporting" size="xsm">
                             Sorting…
                           </Text>
                         </>
                       ) : (
                         <>
                           <Icon icon={Sparkles} size="xsm" color="secondary" />
-                          <Text type="supporting" size="2xs">
+                          <Text type="supporting" size="xsm">
                             Filed by Dump
                           </Text>
                         </>
@@ -156,7 +153,7 @@ function Illustration() {
       </VStack>
       <HStack gap={1.5} hAlign="center" vAlign="center" paddingBlockEnd={5}>
         <Icon icon={Check} size="xsm" color="secondary" />
-        <Text type="supporting" size="2xs">
+        <Text type="supporting" size="xsm">
           Example thoughts · your space starts empty
         </Text>
       </HStack>
@@ -186,16 +183,10 @@ export default function Marketing() {
           }
           centerContent={
             <Link href="#how-it-works" isStandalone className="max-phone:hidden">
-              A little less on your mind
+              How it works
             </Link>
           }
-          endContent={
-            <Start
-              {...start}
-              variant="secondary"
-              label={returning ? 'Open your space' : 'Get started'}
-            />
-          }
+          endContent={<Start {...start} variant="secondary" />}
         />
       }
     >
@@ -208,7 +199,7 @@ export default function Marketing() {
               <VStack gap={6} hAlign="center" paddingBlockStart={10}>
                 <HStack gap={2} vAlign="center">
                   <StatusDot variant="accent" label="Dump" />
-                  <Text type="supporting" size="2xs" className="tracking-[0.15em]">
+                  <Text type="supporting" size="xsm" className="tracking-[0.15em]">
                     FOR THOUGHTS THAT NEED SOMEWHERE TO GO
                   </Text>
                 </HStack>
@@ -222,19 +213,13 @@ export default function Marketing() {
                   The book someone mentioned. A half-formed idea. That link for later. Put it all in
                   Dump. It files each one into the right list for you.
                 </Text>
-                <VStack gap={3} hAlign="center">
-                  <Start {...start} size="lg" label="A little more headspace" />
-                  <Text type="supporting">Capture first. Dump does the sorting.</Text>
-                </VStack>
+                <Start {...start} size="lg" />
               </VStack>
               <Illustration />
               <Grid columns={{ minWidth: 240, max: 3 }} gap={10} id="how-it-works">
-                {features.map(({ icon, step, title, body }) => (
-                  <VStack gap={3} key={step}>
+                {features.map(({ icon, title, body }) => (
+                  <VStack gap={3} key={title}>
                     <Icon icon={icon} size="lg" color="accent" />
-                    <Text type="supporting" size="2xs" className="tracking-[0.15em]">
-                      {step}
-                    </Text>
                     <Heading level={2}>{title}</Heading>
                     <Text color="secondary">{body}</Text>
                   </VStack>
@@ -246,7 +231,7 @@ export default function Marketing() {
                   <Heading level={2} type="display-3" justify="center" textWrap="balance">
                     Less to carry. More room to think.
                   </Heading>
-                  <Start {...start} label={returning ? 'Open Dump' : 'Get started'} />
+                  <Start {...start} />
                   <Text type="supporting" justify="center">
                     Bring your own server, or keep everything on this device.
                   </Text>
@@ -260,11 +245,6 @@ export default function Marketing() {
             <HStack gap={5} hAlign="between" vAlign="center" wrap="wrap">
               <Brand size="compact" />
               <Text type="supporting">Out of your head. Into your space.</Text>
-              {returning && (
-                <Link href="/" isStandalone>
-                  Back to your space ↗
-                </Link>
-              )}
             </HStack>
           </LayoutFooter>
         }

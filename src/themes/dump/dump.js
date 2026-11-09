@@ -334,7 +334,7 @@ export const dumpTheme = {
     },
     "card": {
       "base": {
-        "borderRadius": "var(--radius-page)",
+        "borderRadius": "var(--radius-container)",
         "padding": "var(--spacing-3)"
       }
     },

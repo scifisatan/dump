@@ -63,12 +63,11 @@ test('a device-only notebook never contacts a server and can join one later', as
   await expect(page.getByRole('status', { name: 'Sync status' })).toContainText(
     'Saved on this device',
   );
-  await expect(page.getByText('A clear day.')).toBeVisible();
+  const today = page.getByRole('region', { name: 'Today' });
+  await expect(today.getByRole('heading', { name: 'A clear day.' })).toBeVisible();
+  // An empty Today explains itself and offers nothing to click.
+  await expect(today.getByRole('button')).toHaveCount(0);
   await page.screenshot({ path: 'test-results/today-empty-desktop.png' });
-  await page.getByRole('button', { name: 'Pay rent by friday' }).click();
-  await expect(page.getByRole('textbox', { name: 'Capture a thought' })).toHaveValue(
-    'Pay rent by friday',
-  );
   const text = `device only ${crypto.randomUUID().slice(0, 8)}`;
   await capture(page, `!ideas ${text}`);
   await expect(page.getByRole('article').getByText(text, { exact: true })).toBeVisible();

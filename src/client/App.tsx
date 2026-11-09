@@ -10,12 +10,12 @@ import {
   ArrowLeft,
   ArrowUp,
   Asterisk,
-  CalendarDays,
   CheckCheck,
   Pencil,
   Search,
   Settings,
   Sparkles,
+  Sun,
   Trash2,
   X,
 } from 'lucide-react';
@@ -40,7 +40,6 @@ import { TopNav } from '@astryxdesign/core/TopNav';
 import { VisuallyHidden } from '@astryxdesign/core/VisuallyHidden';
 import {
   byDay,
-  DAY_EXAMPLES,
   dayLabel,
   dueLabel,
   dumpsIn,
@@ -213,8 +212,14 @@ export default function App() {
   useLayoutEffect(() => {
     const input = inputRef.current;
     if (!input) return;
-    input.style.height = 'auto';
-    input.style.height = `${input.scrollHeight}px`;
+    const fit = () => {
+      input.style.height = 'auto';
+      input.style.height = `${input.scrollHeight}px`;
+    };
+    fit();
+    // Crossing the phone breakpoint changes the composer's font size, and with it the line height.
+    window.addEventListener('resize', fit);
+    return () => window.removeEventListener('resize', fit);
   }, [draft, empty]);
 
   // The dump may have been removed, or its list deleted, on another device meanwhile.
@@ -349,7 +354,7 @@ export default function App() {
         <Heading level={level} className="px-1">
           <Text
             type="supporting"
-            size="2xs"
+            size="xsm"
             color={overdue ? 'inherit' : 'secondary'}
             className={cn('tracking-[0.13em] uppercase', overdue && 'text-error')}
           >
@@ -505,18 +510,16 @@ export default function App() {
         }
         icon={
           <VStack gap={4} hAlign="center">
-            <Text type="supporting" size="2xs" className="tracking-[0.18em] uppercase">
+            <Text type="supporting" size="xsm" className="tracking-[0.18em] uppercase">
               {longDate(now)}
             </Text>
-            <Card variant="muted" padding={3}>
-              {done ? (
-                <Icon icon={CheckCheck} size="lg" color="accent" />
-              ) : currentList ? (
-                <ListDot color={currentList.color} size="lg" />
-              ) : (
-                <Icon icon={CalendarDays} size="lg" color="accent" />
-              )}
-            </Card>
+            {done ? (
+              <Icon icon={CheckCheck} color="secondary" />
+            ) : currentList ? (
+              <ListDot color={currentList.color} size="lg" />
+            ) : (
+              <Icon icon={Sun} color="secondary" />
+            )}
           </VStack>
         }
       />
@@ -539,7 +542,7 @@ export default function App() {
               {shownDue ? (
                 <DraftDue due={shownDue} skip={() => setSkippedDue(shownDue)} />
               ) : (
-                <Text type="supporting" size="2xs">
+                <Text type="supporting" size="xsm">
                   Anything goes.{' '}
                   <Text type="inherit" className="max-phone:hidden">
                     Try {hints}
@@ -565,7 +568,7 @@ export default function App() {
       )}
       {!selectedId && !showToday && (
         <VStack gap={1.5} hAlign="center" className="flex-1 justify-center py-14 max-phone:py-10">
-          <Text type="supporting" size="2xs" className="tracking-[0.18em] uppercase">
+          <Text type="supporting" size="xsm" className="tracking-[0.18em] uppercase">
             {new Date(now).toLocaleDateString(undefined, { weekday: 'long' })}
           </Text>
           <Text type="display-2" justify="center">
@@ -594,32 +597,13 @@ export default function App() {
             </VStack>
             {todayGroups.map((group) => dumpGroup(group, 3))}
             {plan.quiet && (
-              <Card variant="transparent" className="border border-dashed border-border">
-                <VStack gap={3} hAlign="center">
-                  <Text weight="semibold" justify="center">
-                    A clear day.
-                  </Text>
-                  <Text type="supporting" justify="center" textWrap="balance">
-                    Nothing due and nothing dumped yet. Give a dump a day, and it waits for you here
-                    when the day comes.
-                  </Text>
-                  <HStack gap={2} hAlign="center" wrap="wrap">
-                    {DAY_EXAMPLES.map((example) => (
-                      <Button
-                        key={example}
-                        variant="secondary"
-                        size="sm"
-                        label={example}
-                        icon={<Icon icon={CalendarDays} size="xsm" color="inherit" />}
-                        onClick={() => {
-                          setDraft(example);
-                          inputRef.current?.focus();
-                        }}
-                      />
-                    ))}
-                  </HStack>
-                </VStack>
-              </Card>
+              <EmptyState
+                isCompact
+                headingLevel={3}
+                icon={<Icon icon={Sun} color="secondary" />}
+                title="A clear day."
+                description="Nothing due today. Give a dump a day and it waits here."
+              />
             )}
           </VStack>
         )}
@@ -731,7 +715,7 @@ export default function App() {
                     </HStack>
                   </Card>
                 </form>
-                <Text type="supporting" size="2xs" className="px-1 max-phone:hidden">
+                <Text type="supporting" size="xsm" className="px-1 max-phone:hidden">
                   Enter to dump · Shift Enter for a new line · {hints}
                 </Text>
               </VStack>

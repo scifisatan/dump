@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { ArrowUpRight, CalendarDays, Check, Circle, MoreHorizontal, Trash2 } from 'lucide-react';
+import { CalendarDays, Check, Circle, MoreHorizontal, Trash2 } from 'lucide-react';
 import { Button } from '@astryxdesign/core/Button';
 import {
   DropdownMenu,
@@ -18,6 +18,7 @@ import { dueLabel, linkHost, timeLabel } from '../../core/views';
 import { isOverdue } from '../../shared/due';
 import type { Collection, Dump } from '../../shared/schema';
 import { DueMenuItems, DuePicker } from './DueDate';
+import { cn } from '../lib/utils';
 import { ListDot } from './ListDot';
 
 export type DumpActions = {
@@ -30,6 +31,9 @@ export type DumpActions = {
 };
 
 const checked = <Icon icon={Check} size="sm" color="inherit" />;
+// The day, list and tag chips under a dump are metadata, so they sit smaller and lighter than
+// the theme's small buttons.
+const chip = 'h-7 gap-1.5 px-2.5 text-sm font-normal';
 
 export function DumpCard({
   dump,
@@ -94,7 +98,10 @@ export function DumpCard({
                     size="sm"
                     label={`${overdue ? 'Overdue' : 'Due'} ${dueLabel(dump.due!, now)}: change date`}
                     icon={<Icon icon={CalendarDays} size="xsm" color="inherit" />}
-                    className={overdue ? 'bg-error-muted text-error' : 'bg-muted'}
+                    className={cn(
+                      chip,
+                      overdue ? 'bg-error-muted text-error' : 'bg-accent-muted text-accent',
+                    )}
                   >
                     {dueLabel(dump.due!, now)}
                   </Button>
@@ -109,6 +116,7 @@ export function DumpCard({
                 size="sm"
                 label={`Open ${list.label}`}
                 icon={<ListDot color={list.color} size="sm" />}
+                className={cn(chip, 'text-secondary')}
                 onClick={() => actions.openList(list.id)}
               >
                 {list.label}
@@ -128,19 +136,13 @@ export function DumpCard({
                 variant="ghost"
                 size="sm"
                 label={`#${tag}`}
+                className={cn(chip, 'text-secondary')}
                 onClick={() => actions.tag(tag)}
               />
             ))}
             {dump.url && (
-              <Link
-                href={dump.url}
-                target="_blank"
-                rel="noopener noreferrer"
-                isStandalone
-                className="wrap-anywhere"
-              >
+              <Link href={dump.url} isExternalLink size="sm" maxLines={1}>
                 {linkHost(dump.url)}
-                <Icon icon={ArrowUpRight} size="xsm" color="inherit" />
               </Link>
             )}
           </HStack>

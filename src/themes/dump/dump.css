@@ -427,9 +427,9 @@
   }
 
   .astryx-card {
-    border-radius: var(--radius-page);
+    border-radius: var(--radius-container);
     --astryx-card-padding: var(--spacing-3);
-    --_card-radius: var(--radius-page);
+    --_card-radius: var(--radius-container);
   }
 
   .astryx-section {
