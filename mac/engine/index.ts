@@ -6,7 +6,6 @@ import { profileRegistry } from '../../src/core/profiles';
 import { createSession, type Session } from '../../src/core/session';
 import {
   byDay,
-  DAY_EXAMPLES,
   dayLabel,
   dueLabel,
   dumpsIn,
@@ -133,7 +132,6 @@ function view(snapshot: Snapshot, full: boolean) {
     lists: book.lists.map(listView),
     webApp: webApp(),
     palette: LIST_COLORS,
-    examples: DAY_EXAMPLES,
     days: dayChoices(now),
     recent: book.dumps.slice(0, RECENT).map((dump) => item(dump, book, now)),
     unfiled: ids(book.unfiled),

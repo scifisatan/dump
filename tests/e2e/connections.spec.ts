@@ -30,13 +30,16 @@ test('a new visitor gets the landing page in place and onboards with a server', 
     page.getByRole('heading', { name: 'Where should your thoughts live?' }),
   ).toBeVisible();
   await page.screenshot({ path: 'test-results/onboarding-desktop.png' });
-  await page.getByRole('button', { name: /Sync with your server/ }).click();
+  // A ClickableCard: the card takes the press; its button is for keyboards and screen readers.
+  await page.getByText('Sync with your server', { exact: true }).click();
   await connectServer(page, HOME, undefined, 'not-the-owner-key-not-the-owner-key');
   await expect(page.getByText('That owner key doesn’t match this server.')).toBeVisible();
   expect(await page.evaluate(() => localStorage.getItem('dump-connections'))).toBeNull();
   await page.getByLabel('Owner key').fill(OWNER_KEY);
   await page.getByRole('button', { name: 'Connect to this server', exact: true }).click();
-  await expect(page.getByRole('status')).toContainText('Saved · local development');
+  await expect(page.getByRole('status', { name: 'Sync status' })).toContainText(
+    'Saved · local development',
+  );
   const text = `first connection ${crypto.randomUUID().slice(0, 8)}`;
   await capture(page, `!ideas ${text}`);
   await page.reload();
@@ -56,26 +59,33 @@ test('a device-only notebook never contacts a server and can join one later', as
     if ([HOME, PEER].includes(new URL(request.url()).origin)) serverRequests.push(request.url());
   });
   await startOnboarding(page);
-  await page.getByRole('button', { name: /Just this device/ }).click();
-  await expect(page.getByRole('status')).toContainText('Saved on this device');
-  await expect(page.getByText('A clear day.')).toBeVisible();
-  await page.screenshot({ path: 'test-results/today-empty-desktop.png' });
-  await page.getByRole('button', { name: 'Pay rent by friday' }).click();
-  await expect(page.getByRole('textbox', { name: 'Capture a thought' })).toHaveValue(
-    'Pay rent by friday',
+  await page.getByText('Just this device', { exact: true }).click();
+  await expect(page.getByRole('status', { name: 'Sync status' })).toContainText(
+    'Saved on this device',
   );
+  const today = page.getByRole('region', { name: 'Today' });
+  await expect(today.getByRole('heading', { name: 'A clear day.' })).toBeVisible();
+  // An empty Today explains itself and offers nothing to click.
+  await expect(today.getByRole('button')).toHaveCount(0);
+  await page.screenshot({ path: 'test-results/today-empty-desktop.png' });
   const text = `device only ${crypto.randomUUID().slice(0, 8)}`;
   await capture(page, `!ideas ${text}`);
   await expect(page.getByRole('article').getByText(text, { exact: true })).toBeVisible();
-  await expect(page.getByRole('status')).toContainText('Saved on this device');
+  await expect(page.getByRole('status', { name: 'Sync status' })).toContainText(
+    'Saved on this device',
+  );
   await page.reload();
   await expect(page.getByRole('article').getByText(text, { exact: true })).toBeVisible();
-  await expect(page.getByRole('status')).toContainText('Saved on this device');
+  await expect(page.getByRole('status', { name: 'Sync status' })).toContainText(
+    'Saved on this device',
+  );
   expect(serverRequests).toEqual([]);
   await page.getByRole('button', { name: 'Settings', exact: true }).click();
   await expect(page.getByText('This notebook lives only in this browser.')).toBeVisible();
   await connectServer(page, PEER, 'Connect and sync');
-  await expect(page.getByRole('status')).toContainText('Saved · local development');
+  await expect(page.getByRole('status', { name: 'Sync status' })).toContainText(
+    'Saved · local development',
+  );
   await expect(page.getByRole('article').getByText(text, { exact: true })).toBeVisible();
   const otherContext = await browser.newContext();
   const other = await otherContext.newPage();
@@ -99,7 +109,9 @@ test('switching between two servers isolates databases, tabs, and live sync', as
   await expect(oldTab.getByRole('article').getByText(homeText, { exact: true })).toBeVisible();
   await page.getByRole('button', { name: 'Settings', exact: true }).click();
   await connectServer(page, PEER, 'Switch to this server');
-  await expect(page.getByRole('status')).toContainText('Saved · local development');
+  await expect(page.getByRole('status', { name: 'Sync status' })).toContainText(
+    'Saved · local development',
+  );
   await expect(page.getByRole('article').getByText(homeText, { exact: true })).toHaveCount(0);
   await capture(page, `!ideas ${peerText}`);
   const peerContext = await browser.newContext();
@@ -130,7 +142,9 @@ test('a changed server identity keeps existing data local and blocks the WebSock
   const text = `identity guard ${crypto.randomUUID().slice(0, 8)}`;
   await onboard(page);
   await capture(page, `!ideas ${text}`);
-  await expect(page.getByRole('status')).toContainText('Saved · local development');
+  await expect(page.getByRole('status', { name: 'Sync status' })).toContainText(
+    'Saved · local development',
+  );
   await page.route('**/api/ping', async (route) => {
     const response = await route.fetch();
     await route.fulfill({ json: { ...(await response.json()), instanceId: 'f'.repeat(64) } });
@@ -151,7 +165,9 @@ test('a device whose key stops working is signed out, keeps its notes, and signs
   await capture(page, `!ideas ${text}`);
   // Reload only once this device has saved, or the capture is lost.
   await expect(page.getByRole('article').getByText(text, { exact: true })).toBeVisible();
-  await expect(page.getByRole('status')).toHaveText('Saved · local development');
+  await expect(page.getByRole('status', { name: 'Sync status' })).toHaveText(
+    'Saved · local development',
+  );
   // Stands in for the owner rotating OWNER_KEY: this device's saved key no longer matches.
   await page.evaluate(() => {
     for (const name of Object.keys(localStorage))
@@ -161,15 +177,19 @@ test('a device whose key stops working is signed out, keeps its notes, and signs
   const sockets: string[] = [];
   page.on('websocket', (socket) => sockets.push(socket.url()));
   await page.reload();
-  await expect(page.getByRole('status')).toContainText('Signed out');
+  await expect(page.getByRole('status', { name: 'Sync status' })).toContainText('Signed out');
   await expect(page.getByRole('article').getByText(text, { exact: true })).toBeVisible();
   expect(sockets).toEqual([]);
   await page.getByRole('button', { name: 'Sign in', exact: true }).click();
   await page.getByLabel('Owner key').fill(OWNER_KEY);
-  await page.getByRole('button', { name: 'Sign in', exact: true }).click();
-  await expect(page.getByText('Signed in. Syncing again.')).toBeVisible();
+  await page.getByRole('dialog').getByRole('button', { name: 'Sign in', exact: true }).click();
+  await expect(
+    page.getByRole('region', { name: 'Notifications' }).getByText('Signed in. Syncing again.'),
+  ).toBeVisible();
   await page.keyboard.press('Escape');
-  await expect(page.getByRole('status')).toContainText('Saved · local development');
+  await expect(page.getByRole('status', { name: 'Sync status' })).toContainText(
+    'Saved · local development',
+  );
 });
 
 test('the API needs the owner key and answers only listed client origins', async ({ request }) => {

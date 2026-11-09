@@ -92,7 +92,6 @@ public struct Snapshot: Codable, Equatable, Sendable {
   public var webApp: WebApp
   public var lists: [List]
   public var palette: [String]
-  public var examples: [String]
   public var days: Days
   public var recent: [Item]
   public var unfiled: [String]
@@ -104,7 +103,7 @@ public struct Snapshot: Codable, Equatable, Sendable {
     ready: false, sync: .local, syncError: nil, saving: false, storageError: nil, attention: false,
     profile: nil, others: [], firstRun: false, openError: nil,
     webApp: WebApp(chosen: nil, standard: ""), lists: [], palette: [],
-    examples: [], days: Days(today: "", tomorrow: ""), recent: [], unfiled: [], doneCount: 0,
+    days: Days(today: "", tomorrow: ""), recent: [], unfiled: [], doneCount: 0,
     dumps: [], places: nil)
 
   public func list(_ id: String?) -> List? { lists.first { $0.id == id } }

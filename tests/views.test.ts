@@ -1,10 +1,9 @@
 import { describe, expect, it } from 'vite-plus/test';
 import type { Snapshot } from '../src/core/client';
 import { DEFAULT_LISTS, makeDump, type Dump } from '../src/shared/schema';
-import { isOverdue, parseDue } from '../src/shared/due';
+import { isOverdue } from '../src/shared/due';
 import {
   byDay,
-  DAY_EXAMPLES,
   dayLabel,
   dueLabel,
   dumpsIn,
@@ -102,11 +101,6 @@ describe('notebook views', () => {
     ]);
     const today = rows.find((row) => row.type === 'today');
     expect(today?.type === 'today' && today.summary).not.toContain('due today');
-  });
-
-  it('offers example dumps for an empty Today that each name a day', () => {
-    const now = day('2026-10-17', 9);
-    for (const example of DAY_EXAMPLES) expect(parseDue(example, now)).not.toBeNull();
   });
 
   it('names each view, and shows home for a list that no longer exists', () => {

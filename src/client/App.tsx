@@ -3,7 +3,6 @@ import {
   useLayoutEffect,
   useRef,
   useState,
-  type ChangeEvent,
   type FormEvent,
   type KeyboardEvent,
 } from 'react';
@@ -11,20 +10,36 @@ import {
   ArrowLeft,
   ArrowUp,
   Asterisk,
-  CalendarDays,
   CheckCheck,
   Pencil,
   Search,
   Settings,
   Sparkles,
+  Sun,
   Trash2,
   X,
 } from 'lucide-react';
-import { toast } from 'sonner';
-import { Link, useLocation, useNavigate, useMatch } from 'react-router-dom';
+import { toast } from './lib/toast';
+import { useLocation, useNavigate, useMatch } from 'react-router-dom';
+import { AppShell } from '@astryxdesign/core/AppShell';
+import { Banner } from '@astryxdesign/core/Banner';
+import { Button } from '@astryxdesign/core/Button';
+import { Card } from '@astryxdesign/core/Card';
+import { Divider } from '@astryxdesign/core/Divider';
+import { EmptyState } from '@astryxdesign/core/EmptyState';
+import { Heading } from '@astryxdesign/core/Heading';
+import { Icon } from '@astryxdesign/core/Icon';
+import { IconButton } from '@astryxdesign/core/IconButton';
+import { Code } from '@astryxdesign/core/Code';
+import { HStack, Layout, LayoutContent, LayoutFooter, VStack } from '@astryxdesign/core/Layout';
+import { Link } from '@astryxdesign/core/Link';
+import { StatusDot } from '@astryxdesign/core/StatusDot';
+import { Text } from '@astryxdesign/core/Text';
+import { TextArea } from '@astryxdesign/core/TextArea';
+import { TopNav } from '@astryxdesign/core/TopNav';
+import { VisuallyHidden } from '@astryxdesign/core/VisuallyHidden';
 import {
   byDay,
-  DAY_EXAMPLES,
   dayLabel,
   dueLabel,
   dumpsIn,
@@ -49,12 +64,27 @@ import { SearchDialog } from './components/SearchDialog';
 import { SettingsDialog } from './components/SettingsDialog';
 import { holdBoot } from './boot';
 import { TriageDialog } from './components/TriageDialog';
-import { Button } from './components/ui/button';
 
+// One reading column for the views and the composer.
 const column = 'mx-auto w-full max-w-190 px-10 max-tablet:px-7 max-phone:px-3.5';
+// The composer frame: a raised card that rings in the accent while you type.
 const composer =
-  'border border-ring/50 bg-capture shadow-capture focus-within:border-ring focus-within:ring-4 focus-within:ring-ring/15';
-const hint = 'rounded-[3px] bg-secondary px-1 py-0.5 [font:inherit]';
+  'border border-border-strong shadow-md focus-within:border-accent-bg focus-within:ring-4 focus-within:ring-accent-muted';
+// The composer's textarea sits bare inside that frame.
+const bareControl = 'border-0 bg-transparent shadow-none outline-none ring-0 px-0';
+const hints = (
+  <>
+    <Code size="inherit" color="inherit">
+      !buy
+    </Code>{' '}
+    <Code size="inherit" color="inherit">
+      #weekend
+    </Code>{' '}
+    <Code size="inherit" color="inherit">
+      by friday
+    </Code>
+  </>
+);
 const pathOf = (place: Place) =>
   place.kind === 'done' ? '/done' : place.kind === 'list' ? `/lists/${place.id}` : '/';
 
@@ -182,8 +212,14 @@ export default function App() {
   useLayoutEffect(() => {
     const input = inputRef.current;
     if (!input) return;
-    input.style.height = 'auto';
-    input.style.height = `${input.scrollHeight}px`;
+    const fit = () => {
+      input.style.height = 'auto';
+      input.style.height = `${input.scrollHeight}px`;
+    };
+    fit();
+    // Crossing the phone breakpoint changes the composer's font size, and with it the line height.
+    window.addEventListener('resize', fit);
+    return () => window.removeEventListener('resize', fit);
   }, [draft, empty]);
 
   // The dump may have been removed, or its list deleted, on another device meanwhile.
@@ -258,12 +294,13 @@ export default function App() {
 
   const inputProps = {
     ref: inputRef,
-    'aria-label': 'Capture a thought',
+    label: 'Capture a thought',
+    isLabelHidden: true,
     placeholder: 'What’s on your mind?',
     value: draft,
-    maxLength: 20_000,
-    disabled: !state.ready,
-    onChange: (event: ChangeEvent<HTMLTextAreaElement>) => setDraft(event.target.value),
+    isDisabled: !state.ready,
+    // Astryx's maxLength draws a counter; cap the draft instead, as the native limit did.
+    onChange: (value: string) => setDraft(value.slice(0, 20_000)),
     onKeyDown: (event: KeyboardEvent<HTMLTextAreaElement>) => {
       if (event.key === 'Enter' && !event.shiftKey && !event.nativeEvent.isComposing) {
         event.preventDefault();
@@ -271,28 +308,36 @@ export default function App() {
       }
     },
   };
+  const sendProps = {
+    type: 'submit' as const,
+    variant: 'primary' as const,
+    label: 'Save dump',
+    isDisabled: !draft.trim() || !state.ready,
+    // Keep focus in the composer so a tap does not close the phone keyboard.
+    onPointerDown: (event: React.PointerEvent) => event.preventDefault(),
+  };
   const status = syncProblem ? (
-    <span
-      className="flex h-8 min-w-0 shrink items-center gap-1.5 rounded-full bg-destructive/10 px-2.5 text-[11px] text-destructive"
+    <HStack
+      gap={1.5}
+      vAlign="center"
       role="status"
-      title={syncText}
+      aria-label="Sync status"
+      className="h-8 min-w-0 shrink rounded-full bg-error-muted px-2.5 text-error"
     >
-      <span className="truncate">{syncText}</span>
+      <Text type="supporting" size="xsm" color="inherit" maxLines={1}>
+        {syncText}
+      </Text>
       {state.sync === 'error' && (
-        <button className="shrink-0 font-medium underline" onClick={() => void client.syncNow()}>
-          Retry
-        </button>
+        <Button variant="ghost" size="sm" label="Retry" onClick={() => void client.syncNow()} />
       )}
       {state.sync === 'signed-out' && (
-        <button className="shrink-0 font-medium underline" onClick={() => setSettingsOpen(true)}>
-          Sign in
-        </button>
+        <Button variant="ghost" size="sm" label="Sign in" onClick={() => setSettingsOpen(true)} />
       )}
-    </span>
+    </HStack>
   ) : (
-    <span className="sr-only" role="status">
+    <VisuallyHidden role="status" aria-label="Sync status">
       {syncText}
-    </span>
+    </VisuallyHidden>
   );
 
   function dumpGroup(
@@ -302,373 +347,382 @@ export default function App() {
       dumps,
       overdue,
     }: { key: string; label: string; dumps: Dump[]; overdue?: boolean },
-    Heading: 'h2' | 'h3',
+    level: 2 | 3,
   ) {
     return (
-      <section key={key} aria-label={label}>
-        <Heading
-          className={cn(
-            'mb-2 px-1 text-[9px] tracking-[1.3px] uppercase',
-            overdue ? 'text-destructive' : 'text-muted-foreground',
-          )}
-        >
-          {label}
+      <VStack as="section" key={key} aria-label={label} gap={2}>
+        <Heading level={level} className="px-1">
+          <Text
+            type="supporting"
+            size="xsm"
+            color={overdue ? 'inherit' : 'secondary'}
+            className={cn('tracking-[0.13em] uppercase', overdue && 'text-error')}
+          >
+            {label}
+          </Text>
         </Heading>
-        <div className="divide-y overflow-hidden rounded-[12px] border bg-card shadow-soft">
-          {dumps.map((dump) => (
-            <DumpCard
-              key={dump.id}
-              dump={dump}
-              lists={lists}
-              actions={actions}
-              sorting={state.sorting.has(dump.id)}
-              showList={!currentList}
-            />
+        <Card padding={0} className="overflow-hidden">
+          {dumps.map((dump, index) => (
+            <VStack key={dump.id}>
+              {index > 0 && <Divider />}
+              <DumpCard
+                dump={dump}
+                lists={lists}
+                actions={actions}
+                sorting={state.sorting.has(dump.id)}
+                showList={!currentList}
+              />
+            </VStack>
           ))}
-        </div>
-      </section>
+        </Card>
+      </VStack>
     );
   }
 
   if (fatal)
     return (
-      <main className="grid min-h-dvh place-content-center gap-5 text-center text-muted-foreground">
-        <Asterisk size={40} />
-        <h1>Your space couldn’t open.</h1>
-        <p>{fatal}</p>
-        <Button onClick={() => window.location.reload()}>Try again</Button>
-      </main>
+      <AppShell mobileNav={false}>
+        <EmptyState
+          headingLevel={1}
+          title="Your space couldn’t open."
+          description={fatal}
+          icon={<Icon icon={Asterisk} size="lg" />}
+          actions={<Button label="Try again" onClick={() => window.location.reload()} />}
+        />
+      </AppShell>
     );
+
+  const nav = (
+    <TopNav
+      label="Dump"
+      heading={
+        isHome ? (
+          <HStack gap={2} vAlign="center">
+            <Link href="/" label="Dump home">
+              <Brand size="compact" badgeOnPhone />
+            </Link>
+            <VisuallyHidden>
+              <Heading level={1}>{title}</Heading>
+            </VisuallyHidden>
+          </HStack>
+        ) : (
+          <HStack gap={2} vAlign="center" className="min-w-0">
+            <IconButton
+              href="/"
+              variant="ghost"
+              label="Back to your space"
+              icon={<Icon icon={ArrowLeft} />}
+            />
+            {currentList && <ListDot color={currentList.color} />}
+            <Heading level={1}>
+              <Text type="large" weight="semibold" maxLines={1}>
+                {title}
+              </Text>
+            </Heading>
+            <Text type="supporting">{selected.length}</Text>
+          </HStack>
+        )
+      }
+      endContent={
+        <HStack gap={1} vAlign="center" className="min-w-0">
+          {currentList && (
+            <IconButton
+              variant="ghost"
+              label="Edit list"
+              icon={<Icon icon={Pencil} size="sm" />}
+              onClick={() => setEditor({ list: currentList })}
+            />
+          )}
+          {done && !selectedId && completed.length > 0 && (
+            <Button
+              variant={confirmClear ? 'destructive' : 'secondary'}
+              size="sm"
+              label={confirmClear ? `Clear ${completed.length}?` : 'Clear done'}
+              icon={<Icon icon={Trash2} size="sm" color="inherit" />}
+              onBlur={() => setConfirmClear(false)}
+              onClick={() => {
+                if (!confirmClear) return setConfirmClear(true);
+                setConfirmClear(false);
+                const count = client.clearDone();
+                toast(`Cleared ${count} done ${count === 1 ? 'dump' : 'dumps'}`);
+              }}
+            />
+          )}
+          {isHome && unfiled.length > 0 && (
+            <Button
+              variant="secondary"
+              size="sm"
+              label="Sort inbox"
+              icon={<Icon icon={Sparkles} size="sm" color="inherit" />}
+              onClick={() => setTriage(true)}
+            >
+              <Text type="inherit" className="max-phone:hidden">
+                Sort inbox
+              </Text>
+            </Button>
+          )}
+          {status}
+          <IconButton
+            variant="ghost"
+            label="Search your space"
+            tooltip="Search (⌘K)"
+            icon={<Icon icon={Search} />}
+            onClick={openSearch}
+          />
+          <HStack className="relative">
+            <IconButton
+              variant="ghost"
+              label="Settings"
+              icon={<Icon icon={Settings} />}
+              onClick={() => setSettingsOpen(true)}
+            />
+            {syncProblem && (
+              <StatusDot
+                variant="error"
+                label={syncText}
+                aria-hidden
+                className="pointer-events-none absolute top-1.5 right-1.5"
+              />
+            )}
+          </HStack>
+        </HStack>
+      }
+    />
+  );
+
+  const emptyView = (
+    <VStack gap={5} className="mx-auto w-full max-w-160 pb-[8vh] max-phone:pb-0">
+      <EmptyState
+        headingLevel={2}
+        title={
+          done
+            ? 'Small wins will live here.'
+            : currentList
+              ? 'Room for something good.'
+              : 'A clear head.'
+        }
+        description={
+          done
+            ? 'Check off a thought when you’re finished with it.'
+            : currentList
+              ? `Dump something here, or type ${prefixFor(currentList)} anywhere.`
+              : 'Drop a thought, a link, or that thing you don’t want to forget. Give it a day, like “by friday”, and it waits for you in Today.'
+        }
+        icon={
+          <VStack gap={4} hAlign="center">
+            <Text type="supporting" size="xsm" className="tracking-[0.18em] uppercase">
+              {longDate(now)}
+            </Text>
+            {done ? (
+              <Icon icon={CheckCheck} color="secondary" />
+            ) : currentList ? (
+              <ListDot color={currentList.color} size="lg" />
+            ) : (
+              <Icon icon={Sun} color="secondary" />
+            )}
+          </VStack>
+        }
+      />
+      {composing && (
+        <form onSubmit={submit}>
+          <Card padding={0} className={cn(composer, 'text-left')}>
+            <HStack gap={3} vAlign="start" paddingInline={5} paddingBlockStart={5}>
+              <Icon icon={Asterisk} size="lg" color="accent" className="mt-0.5 shrink-0" />
+              <TextArea
+                {...inputProps}
+                rows={2}
+                width="100%"
+                controlClassName={cn(
+                  bareControl,
+                  '[&_textarea]:max-h-70 [&_textarea]:min-h-17.75 [&_textarea]:resize-none [&_textarea]:text-[17px] [&_textarea]:leading-[1.6] max-phone:[&_textarea]:text-[16px]',
+                )}
+              />
+            </HStack>
+            <HStack gap={2} hAlign="between" vAlign="center" padding={4} paddingInlineStart={6}>
+              {shownDue ? (
+                <DraftDue due={shownDue} skip={() => setSkippedDue(shownDue)} />
+              ) : (
+                <Text type="supporting" size="xsm">
+                  Anything goes.{' '}
+                  <Text type="inherit" className="max-phone:hidden">
+                    Try {hints}
+                  </Text>
+                </Text>
+              )}
+              <Button {...sendProps} endContent={<Icon icon={ArrowUp} size="sm" color="inherit" />}>
+                Dump it
+              </Button>
+            </HStack>
+          </Card>
+        </form>
+      )}
+    </VStack>
+  );
+
+  const dumpsView = (
+    <>
+      {showToday && completed.length > 0 && (
+        <Link href="/done" isStandalone className="mb-4 self-center">
+          {completed.length} done →
+        </Link>
+      )}
+      {!selectedId && !showToday && (
+        <VStack gap={1.5} hAlign="center" className="flex-1 justify-center py-14 max-phone:py-10">
+          <Text type="supporting" size="xsm" className="tracking-[0.18em] uppercase">
+            {new Date(now).toLocaleDateString(undefined, { weekday: 'long' })}
+          </Text>
+          <Text type="display-2" justify="center">
+            {new Date(now).toLocaleDateString(undefined, { month: 'long', day: 'numeric' })}
+          </Text>
+          <Text type="supporting" justify="center">
+            {done
+              ? `${selected.length} small ${selected.length === 1 ? 'win' : 'wins'}. A little more room in your mind.`
+              : `${selected.length} ${selected.length === 1 ? 'thought' : 'thoughts'} in ${currentList?.label ?? 'your space'}.`}
+          </Text>
+        </VStack>
+      )}
+      <VStack gap={5} aria-label="Dumps">
+        {groups.map((group) => dumpGroup(group, 2))}
+        {showToday && (
+          <VStack
+            as="section"
+            ref={todayRef}
+            aria-label="Today"
+            gap={5}
+            className={cn(history.length > 0 && 'mt-3 border-t border-border pt-6')}
+          >
+            <VStack gap={0.5} paddingInline={1}>
+              <Heading level={2}>Today</Heading>
+              <Text type="supporting">{plan.heading}</Text>
+            </VStack>
+            {todayGroups.map((group) => dumpGroup(group, 3))}
+            {plan.quiet && (
+              <EmptyState
+                isCompact
+                headingLevel={3}
+                icon={<Icon icon={Sun} color="secondary" />}
+                title="A clear day."
+                description="Nothing due today. Give a dump a day and it waits here."
+              />
+            )}
+          </VStack>
+        )}
+      </VStack>
+    </>
+  );
+
   return (
     // Pinned to the visible viewport so the composer rides above the phone keyboard. The height
     // eases with the iOS keyboard's curve and duration, which is longer than other motion here.
-    <div className="fixed inset-x-0 top-(--vv-top,0px) h-(--vv-height,100dvh) overflow-hidden pointer-coarse:transition-[height] pointer-coarse:duration-250 pointer-coarse:ease-[cubic-bezier(0.38,0.7,0.125,1)]">
-      <main className="flex h-full min-w-0 flex-col">
-        <header className="shrink-0 border-b">
-          <div className={cn(column, 'flex h-16 items-center gap-2 max-phone:h-14')}>
-            {isHome ? (
-              <>
-                <Link to="/" className="shrink-0" aria-label="Dump home">
-                  <Brand
-                    className="gap-2 text-[22px] tracking-[-1px] max-phone:[&>span+span]:hidden"
-                    markClassName="size-7 rounded-[9px] [&_svg]:size-5"
-                  />
-                </Link>
-                <h1 className="sr-only">{title}</h1>
-              </>
-            ) : (
-              <>
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  className="-ml-2 shrink-0 text-muted-foreground"
-                  asChild
-                >
-                  <Link to="/" aria-label="Back to your space">
-                    <ArrowLeft size={19} />
-                  </Link>
-                </Button>
-                {currentList && <ListDot color={currentList.color} />}
-                <h1 className="truncate text-[20px] font-[600] tracking-[-0.6px] max-phone:text-[18px]">
-                  {title}
-                </h1>
-                <span className="text-[12px] text-muted-foreground">{selected.length}</span>
-              </>
-            )}
-            <div className="ml-auto flex min-w-0 items-center gap-1">
-              {currentList && (
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  className="text-muted-foreground"
-                  aria-label="Edit list"
-                  onClick={() => setEditor({ list: currentList })}
-                >
-                  <Pencil size={16} />
-                </Button>
-              )}
-              {done && !selectedId && completed.length > 0 && (
-                <Button
-                  variant={confirmClear ? 'destructive' : 'outline'}
-                  className={cn(
-                    'text-[11px]',
-                    !confirmClear && 'bg-card text-muted-foreground dark:bg-card',
-                  )}
-                  onBlur={() => setConfirmClear(false)}
-                  onClick={() => {
-                    if (!confirmClear) return setConfirmClear(true);
-                    setConfirmClear(false);
-                    const count = client.clearDone();
-                    toast(`Cleared ${count} done ${count === 1 ? 'dump' : 'dumps'}`);
-                  }}
-                >
-                  <Trash2 size={15} />
-                  <span>{confirmClear ? `Clear ${completed.length}?` : 'Clear done'}</span>
-                </Button>
-              )}
-              {isHome && unfiled.length > 0 && (
-                <Button
-                  variant="outline"
-                  className="bg-card text-[11px] text-muted-foreground dark:bg-card max-phone:size-9 max-phone:px-0"
-                  aria-label="Sort inbox"
-                  onClick={() => setTriage(true)}
-                >
-                  <Sparkles size={15} />
-                  <span className="max-phone:hidden">Sort inbox</span>
-                </Button>
-              )}
-              {status}
-              <div className="flex items-center gap-0.5 rounded-full border bg-card p-0.5">
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  className="size-8 rounded-full text-muted-foreground"
-                  aria-label="Search your space"
-                  title="Search (⌘K)"
-                  onClick={openSearch}
-                >
-                  <Search size={17} />
-                </Button>
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  className="relative size-8 rounded-full text-muted-foreground"
-                  aria-label="Settings"
-                  onClick={() => setSettingsOpen(true)}
-                >
-                  <Settings size={17} />
-                  {syncProblem && (
-                    <span
-                      aria-hidden
-                      className="absolute top-1.5 right-1.5 size-2 rounded-full bg-destructive ring-2 ring-card"
-                    />
-                  )}
-                </Button>
-              </div>
-            </div>
-          </div>
-        </header>
-        <div
-          ref={scrollRef}
-          className="min-h-0 flex-1 overflow-y-auto overscroll-contain"
-          onScroll={(event) => {
-            const { scrollHeight, scrollTop, clientHeight } = event.currentTarget;
-            atBottom.current = scrollHeight - scrollTop - clientHeight < (atToday.current ? 1 : 48);
-          }}
-        >
-          <div
-            ref={contentRef}
-            className={cn(
-              column,
-              'flex min-h-full flex-col py-6 max-phone:py-4',
-              empty ? 'justify-center' : 'justify-end',
-            )}
+    <AppShell
+      mobileNav={false}
+      variant="wash"
+      topNav={nav}
+      className="fixed inset-x-0 top-(--vv-top,0px) h-(--vv-height,100dvh) overflow-hidden pointer-coarse:transition-[height] pointer-coarse:duration-250 pointer-coarse:ease-[cubic-bezier(0.38,0.7,0.125,1)]"
+    >
+      <Layout
+        height="fill"
+        content={
+          <LayoutContent
+            ref={scrollRef}
+            isScrollable
+            padding={0}
+            className="overscroll-contain"
+            onScroll={(event) => {
+              const { scrollHeight, scrollTop, clientHeight } = event.currentTarget;
+              atBottom.current =
+                scrollHeight - scrollTop - clientHeight < (atToday.current ? 1 : 48);
+            }}
           >
-            {state.storageError && (
-              <div
-                className="mb-4 flex items-center justify-between gap-3 rounded-[8px] border border-destructive p-3.75 text-[12px] max-phone:flex-col max-phone:items-start"
-                role="alert"
-              >
-                {state.storageError}
-                <Button variant="outline" onClick={exportDumps}>
-                  Export now
-                </Button>
-              </div>
-            )}
-            {state.syncError && (
-              <p className="mb-4 text-[12px] text-destructive">{state.syncError}</p>
-            )}
-            {selectedId && !empty && (
-              <div className="mb-3 flex items-center justify-between text-[11px] text-muted-foreground">
-                <span>Found in your space</span>
-                <button
-                  className="flex items-center gap-1 hover:text-foreground"
-                  onClick={() => navigate(location.pathname)}
-                >
-                  <X size={13} />
-                  Show all
-                </button>
-              </div>
-            )}
-            {!state.ready ? (
-              <p className="py-10 text-center text-[12px] text-muted-foreground">
-                Opening your space…
-              </p>
-            ) : empty ? (
-              <div className="mx-auto w-full max-w-160 pb-[8vh] text-center max-phone:pb-0">
-                <div className="mb-5 text-[10px] tracking-[1.8px] text-muted-foreground uppercase">
-                  {longDate(now)}
-                </div>
-                <div className="mx-auto mb-3.75 grid size-14 place-items-center rounded-[18px] bg-secondary text-accent-foreground">
-                  {done ? (
-                    <CheckCheck size={29} />
-                  ) : currentList ? (
-                    <ListDot color={currentList.color} className="size-3 min-w-3" />
-                  ) : (
-                    <CalendarDays size={29} strokeWidth={1.5} />
-                  )}
-                </div>
-                <h2 className="text-[22px] font-[550] tracking-[-0.6px] max-phone:text-[19px]">
-                  {done
-                    ? 'Small wins will live here.'
-                    : currentList
-                      ? 'Room for something good.'
-                      : 'A clear head.'}
-                </h2>
-                <p className="mt-2 text-[12px] leading-[1.8] text-muted-foreground">
-                  {done
-                    ? 'Check off a thought when you’re finished with it.'
-                    : currentList
-                      ? `Dump something here, or type ${prefixFor(currentList)} anywhere.`
-                      : 'Drop a thought, a link, or that thing you don’t want to forget. Give it a day, like “by friday”, and it waits for you in Today.'}
-                </p>
-                {composing && (
-                  <form className={cn(composer, 'mt-7 rounded-[14px] text-left')} onSubmit={submit}>
-                    <div className="flex items-start gap-3.5 px-5.5 pt-5.75 max-phone:gap-2.5 max-phone:px-4 max-phone:pt-4.75">
-                      <Asterisk size={25} className="mt-0.5 shrink-0 text-accent-foreground" />
-                      <textarea
-                        {...inputProps}
-                        className="max-h-70 min-h-17.75 w-full resize-none border-0 bg-transparent text-[17px] leading-[1.6] outline-none placeholder:text-muted-foreground placeholder:opacity-85 max-phone:text-[16px]"
-                        rows={2}
-                      />
-                    </div>
-                    <div className="flex items-center justify-between gap-2.5 pt-3.25 pr-3.75 pb-3.75 pl-6 max-phone:pt-3 max-phone:pr-3.25 max-phone:pb-3.25 max-phone:pl-4.5">
-                      {shownDue ? (
-                        <DraftDue due={shownDue} skip={() => setSkippedDue(shownDue)} />
-                      ) : (
-                        <span className="text-[10px] text-muted-foreground">
-                          Anything goes.
-                          <span className="ml-1.75 max-phone:hidden">
-                            Try <code className={hint}>!buy</code>,{' '}
-                            <code className={hint}>#weekend</code> or{' '}
-                            <code className={hint}>by friday</code>
-                          </span>
-                        </span>
-                      )}
-                      <Button
-                        type="submit"
-                        className="text-[11px]"
-                        disabled={!draft.trim() || !state.ready}
-                        aria-label="Save dump"
-                        onPointerDown={(event) => event.preventDefault()}
-                      >
-                        Dump it
-                        <ArrowUp size={17} />
-                      </Button>
-                    </div>
-                  </form>
-                )}
-              </div>
-            ) : (
-              <>
-                {showToday && completed.length > 0 && (
-                  <Link
-                    to="/done"
-                    className="mb-4 self-center text-[11px] text-muted-foreground hover:text-foreground"
-                  >
-                    {completed.length} done →
-                  </Link>
-                )}
-                {!selectedId && !showToday && (
-                  <div className="flex flex-1 flex-col items-center justify-center py-14 text-center max-phone:py-10">
-                    <div className="text-[10px] tracking-[1.8px] text-muted-foreground uppercase">
-                      {new Date(now).toLocaleDateString(undefined, { weekday: 'long' })}
-                    </div>
-                    <div className="mt-1.5 text-[44px] leading-none font-[600] tracking-[-1.8px] max-phone:text-[36px]">
-                      {new Date(now).toLocaleDateString(undefined, {
-                        month: 'long',
-                        day: 'numeric',
-                      })}
-                    </div>
-                    <p className="mt-3 text-[12px] text-muted-foreground">
-                      {done
-                        ? `${selected.length} small ${selected.length === 1 ? 'win' : 'wins'}. A little more room in your mind.`
-                        : `${selected.length} ${selected.length === 1 ? 'thought' : 'thoughts'} in ${currentList?.label ?? 'your space'}.`}
-                    </p>
-                  </div>
-                )}
-                <div className="grid gap-5" aria-label="Dumps">
-                  {groups.map((group) => dumpGroup(group, 'h2'))}
-                  {showToday && (
-                    <section
-                      ref={todayRef}
-                      aria-label="Today"
-                      className={cn('grid gap-5', history.length > 0 && 'mt-3 border-t pt-6')}
-                    >
-                      <div className="px-1">
-                        <h2 className="text-[17px] font-[600] tracking-[-0.4px]">Today</h2>
-                        <p className="mt-0.5 text-[12px] text-muted-foreground">{plan.heading}</p>
-                      </div>
-                      {todayGroups.map((group) => dumpGroup(group, 'h3'))}
-                      {plan.quiet && (
-                        <div className="rounded-[12px] border border-dashed px-5 py-6 text-center max-phone:px-4">
-                          <p className="text-[15px] font-[550] tracking-[-0.2px]">A clear day.</p>
-                          <p className="mx-auto mt-1 max-w-84 text-[12px] leading-[1.7] text-muted-foreground">
-                            Nothing due and nothing dumped yet. Give a dump a day, and it waits for
-                            you here when the day comes.
-                          </p>
-                          <div className="mt-4 flex flex-wrap justify-center gap-2 max-phone:gap-1.75">
-                            {DAY_EXAMPLES.map((example) => (
-                              <button
-                                key={example}
-                                className="flex items-center gap-1.5 rounded-[6px] border bg-card px-2.5 py-1.5 text-[11px] text-muted-foreground hover:text-foreground"
-                                onClick={() => {
-                                  setDraft(example);
-                                  inputRef.current?.focus();
-                                }}
-                              >
-                                <CalendarDays size={12} />
-                                {example}
-                              </button>
-                            ))}
-                          </div>
-                        </div>
-                      )}
-                    </section>
-                  )}
-                </div>
-              </>
-            )}
-          </div>
-        </div>
-        {!empty && composing && (
-          <div className="shrink-0 pb-[max(16px,calc(env(safe-area-inset-bottom)+6px))] keyboard:pb-4">
-            <div className={column}>
-              <form
-                className={cn(composer, 'flex items-end gap-2.5 rounded-[16px] py-1.5 pr-1.5 pl-4')}
-                onSubmit={submit}
-              >
-                <Asterisk size={20} className="mb-2.5 shrink-0 text-accent-foreground" />
-                <textarea
-                  {...inputProps}
-                  className="max-h-50 min-w-0 flex-1 resize-none border-0 bg-transparent py-2 text-[15px] leading-[1.5] outline-none placeholder:text-muted-foreground placeholder:opacity-85 max-phone:text-[16px]"
-                  rows={1}
+            <VStack
+              ref={contentRef}
+              className={cn(
+                column,
+                'min-h-full py-6 max-phone:py-4',
+                empty ? 'justify-center' : 'justify-end',
+              )}
+            >
+              {state.storageError && (
+                <Banner
+                  status="error"
+                  title={state.storageError}
+                  endContent={<Button label="Export now" onClick={exportDumps} />}
+                  className="mb-4"
                 />
-                {shownDue && (
-                  <div className="mb-1.5">
-                    <DraftDue due={shownDue} skip={() => setSkippedDue(shownDue)} />
-                  </div>
-                )}
-                <Button
-                  type="submit"
-                  size="icon"
-                  className="size-9 shrink-0 rounded-full"
-                  disabled={!draft.trim() || !state.ready}
-                  aria-label="Save dump"
-                  // Keep focus in the composer so a tap does not close the phone keyboard.
-                  onPointerDown={(event) => event.preventDefault()}
-                >
-                  <ArrowUp size={18} />
-                </Button>
-              </form>
-              <p className="mt-2 px-1 text-[10px] text-muted-foreground max-phone:hidden">
-                Enter to dump · Shift Enter for a new line · <code className={hint}>!buy</code>{' '}
-                <code className={hint}>#weekend</code> <code className={hint}>by friday</code>
-              </p>
-            </div>
-          </div>
-        )}
-      </main>
+              )}
+              {state.syncError && (
+                <Text type="supporting" color="inherit" className="mb-4 text-error">
+                  {state.syncError}
+                </Text>
+              )}
+              {selectedId && !empty && (
+                <HStack hAlign="between" vAlign="center" className="mb-3">
+                  <Text type="supporting">Found in your space</Text>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    label="Show all"
+                    icon={<Icon icon={X} size="xsm" color="inherit" />}
+                    onClick={() => navigate(location.pathname)}
+                  />
+                </HStack>
+              )}
+              {!state.ready ? (
+                <Text type="supporting" justify="center" className="py-10">
+                  Opening your space…
+                </Text>
+              ) : empty ? (
+                emptyView
+              ) : (
+                dumpsView
+              )}
+            </VStack>
+          </LayoutContent>
+        }
+        footer={
+          !empty &&
+          composing && (
+            <LayoutFooter
+              padding={0}
+              className="pb-[max(16px,calc(env(safe-area-inset-bottom)+6px))] keyboard:pb-4"
+            >
+              <VStack gap={2} className={column}>
+                <form onSubmit={submit}>
+                  <Card padding={0} className={composer}>
+                    <HStack
+                      gap={2}
+                      vAlign="end"
+                      paddingBlock={1.5}
+                      paddingInlineEnd={1.5}
+                      paddingInlineStart={4}
+                    >
+                      <Icon icon={Asterisk} color="accent" className="mb-2.5 shrink-0" />
+                      <TextArea
+                        {...inputProps}
+                        rows={1}
+                        width="100%"
+                        controlClassName={cn(
+                          bareControl,
+                          '[&_textarea]:max-h-50 [&_textarea]:resize-none [&_textarea]:py-2 [&_textarea]:text-[15px] [&_textarea]:leading-[1.5] max-phone:[&_textarea]:text-[16px]',
+                        )}
+                      />
+                      {shownDue && (
+                        <VStack className="mb-1.5">
+                          <DraftDue due={shownDue} skip={() => setSkippedDue(shownDue)} />
+                        </VStack>
+                      )}
+                      <IconButton {...sendProps} icon={<Icon icon={ArrowUp} />} />
+                    </HStack>
+                  </Card>
+                </form>
+                <Text type="supporting" size="xsm" className="px-1 max-phone:hidden">
+                  Enter to dump · Shift Enter for a new line · {hints}
+                </Text>
+              </VStack>
+            </LayoutFooter>
+          )
+        }
+      />
       <SearchDialog
         open={searchOpen}
         onOpenChange={setSearchOpen}
@@ -708,6 +762,6 @@ export default function App() {
           close={() => setTriage(false)}
         />
       )}
-    </div>
+    </AppShell>
   );
 }

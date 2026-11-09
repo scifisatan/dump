@@ -36,10 +36,13 @@ export async function startOnboarding(page: Page) {
 
 export async function onboard(page: Page, address = HOME) {
   await startOnboarding(page);
-  await page.getByRole('button', { name: /Sync with your server/ }).click();
+  // A ClickableCard: the card takes the press; its button is for keyboards and screen readers.
+  await page.getByText('Sync with your server', { exact: true }).click();
   await connectServer(page, address);
   await expect(page.getByRole('textbox', { name: 'Capture a thought' })).toBeEnabled();
-  await expect(page.getByRole('status')).toContainText('Saved · local development');
+  await expect(page.getByRole('status', { name: 'Sync status' })).toContainText(
+    'Saved · local development',
+  );
 }
 
 // An empty notebook on this device only, so a test controls everything on screen. Close it with
@@ -51,7 +54,7 @@ export async function deviceOnly(browser: Browser, options: BrowserContextOption
   });
   const page = await context.newPage();
   await startOnboarding(page);
-  await page.getByRole('button', { name: /Just this device/ }).click();
+  await page.getByText('Just this device', { exact: true }).click();
   await expect(page.getByRole('textbox', { name: 'Capture a thought' })).toBeEnabled();
   return page;
 }

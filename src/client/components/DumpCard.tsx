@@ -1,23 +1,25 @@
 import { useState } from 'react';
-import { ArrowUpRight, CalendarDays, Check, Circle, MoreHorizontal, Trash2 } from 'lucide-react';
+import { CalendarDays, Check, Circle, MoreHorizontal, Trash2 } from 'lucide-react';
+import { Button } from '@astryxdesign/core/Button';
+import {
+  DropdownMenu,
+  DropdownMenuDivider,
+  DropdownMenuGroup,
+  DropdownMenuItem,
+  DropdownMenuSubMenu,
+} from '@astryxdesign/core/DropdownMenu';
+import { Icon } from '@astryxdesign/core/Icon';
+import { IconButton } from '@astryxdesign/core/IconButton';
+import { HStack, VStack } from '@astryxdesign/core/Layout';
+import { Link } from '@astryxdesign/core/Link';
+import { StatusDot } from '@astryxdesign/core/StatusDot';
+import { Text } from '@astryxdesign/core/Text';
 import { dueLabel, linkHost, timeLabel } from '../../core/views';
 import { isOverdue } from '../../shared/due';
 import type { Collection, Dump } from '../../shared/schema';
-import { cn } from '../lib/utils';
 import { DueMenuItems, DuePicker } from './DueDate';
+import { cn } from '../lib/utils';
 import { ListDot } from './ListDot';
-import { Button } from './ui/button';
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuLabel,
-  DropdownMenuSeparator,
-  DropdownMenuSub,
-  DropdownMenuSubContent,
-  DropdownMenuSubTrigger,
-  DropdownMenuTrigger,
-} from './ui/dropdown-menu';
 
 export type DumpActions = {
   complete: (dump: Dump) => void;
@@ -27,6 +29,11 @@ export type DumpActions = {
   openList: (list: string) => void;
   tag: (tag: string) => void;
 };
+
+const checked = <Icon icon={Check} size="sm" color="inherit" />;
+// The day, list and tag chips under a dump are metadata, so they sit smaller and lighter than
+// the theme's small buttons.
+const chip = 'h-7 gap-1.5 px-2.5 text-sm font-normal';
 
 export function DumpCard({
   dump,
@@ -54,129 +61,153 @@ export function DumpCard({
     />
   );
   return (
-    <article className="group flex animate-card-in items-start gap-2.5 px-3.5 py-2.5 hover:bg-muted/40 max-phone:gap-2 max-phone:px-3">
-      <button
-        className="grid min-h-6 w-5 shrink-0 place-items-center text-muted-foreground opacity-70 hover:text-accent-foreground hover:opacity-100 max-phone:min-h-8"
-        aria-label={dump.done ? `Mark incomplete: ${dump.text}` : `Complete: ${dump.text}`}
+    <HStack
+      as="article"
+      gap={2}
+      vAlign="start"
+      paddingInline={3}
+      paddingBlock={2}
+      className="group animate-card-in hover:bg-overlay-hover"
+    >
+      <IconButton
+        variant="ghost"
+        size="sm"
+        label={dump.done ? `Mark incomplete: ${dump.text}` : `Complete: ${dump.text}`}
+        icon={<Icon icon={dump.done ? Check : Circle} size="sm" color="secondary" />}
         onClick={() => actions.complete(dump)}
-      >
-        {dump.done ? <Check size={16} /> : <Circle size={17} />}
-      </button>
-      <div className="min-w-0 flex-1 py-0.5 max-phone:py-1">
-        <p
-          className={cn(
-            'text-[14px] leading-[1.5] whitespace-pre-wrap wrap-anywhere',
-            dump.done && 'line-through opacity-60',
-          )}
+      />
+      <VStack gap={1} className="min-w-0 flex-1 py-1">
+        <Text
+          as="p"
+          display="block"
+          hasStrikethrough={dump.done}
+          color={dump.done ? 'secondary' : 'primary'}
+          className="whitespace-pre-wrap wrap-anywhere"
         >
           {dump.text}
-        </p>
+        </Text>
         {hasMeta && (
-          <div className="mt-1 flex flex-wrap items-center gap-2 text-[11px] text-muted-foreground">
+          <HStack gap={2} vAlign="center" wrap="wrap">
             {dump.due && (
-              <DropdownMenu>
-                <DropdownMenuTrigger asChild>
-                  <button
+              <DropdownMenu
+                hasChevron={false}
+                renderTrigger={(props) => (
+                  <Button
+                    {...props}
+                    variant="ghost"
+                    size="sm"
+                    label={`${overdue ? 'Overdue' : 'Due'} ${dueLabel(dump.due!, now)}: change date`}
+                    icon={<Icon icon={CalendarDays} size="xsm" color="inherit" />}
                     className={cn(
-                      'inline-flex items-center gap-1 rounded-[4px] px-1.5 py-0.25 hover:text-foreground',
-                      overdue ? 'bg-destructive/10 text-destructive' : 'bg-muted',
+                      chip,
+                      overdue ? 'bg-error-muted text-error' : 'bg-accent-muted text-accent',
                     )}
-                    aria-label={`${overdue ? 'Overdue' : 'Due'} ${dueLabel(dump.due, now)}: change date`}
                   >
-                    <CalendarDays size={11} />
-                    {dueLabel(dump.due, now)}
-                  </button>
-                </DropdownMenuTrigger>
-                <DropdownMenuContent align="start">{dueItems}</DropdownMenuContent>
+                    {dueLabel(dump.due!, now)}
+                  </Button>
+                )}
+              >
+                {dueItems}
               </DropdownMenu>
             )}
             {list && (
-              <button
-                className="flex items-center gap-1.25 hover:text-foreground"
-                aria-label={`Open ${list.label}`}
+              <Button
+                variant="ghost"
+                size="sm"
+                label={`Open ${list.label}`}
+                icon={<ListDot color={list.color} size="sm" />}
+                className={cn(chip, 'text-secondary')}
                 onClick={() => actions.openList(list.id)}
               >
-                <ListDot color={list.color} className="size-1.5 min-w-1.5" />
                 {list.label}
-              </button>
+              </Button>
             )}
             {sorting && !list && (
-              <span className="flex items-center gap-1.25">
-                <span className="size-1.5 rounded-full bg-ring motion-safe:animate-pulse" />
-                Sorting…
-              </span>
+              <HStack gap={1.5} vAlign="center">
+                <StatusDot variant="accent" label="Sorting" isPulsing />
+                <Text type="supporting" size="xsm">
+                  Sorting…
+                </Text>
+              </HStack>
             )}
             {dump.tags.map((tag) => (
-              <button className="text-accent-foreground" key={tag} onClick={() => actions.tag(tag)}>
-                #{tag}
-              </button>
+              <Button
+                key={tag}
+                variant="ghost"
+                size="sm"
+                label={`#${tag}`}
+                className={cn(chip, 'text-secondary')}
+                onClick={() => actions.tag(tag)}
+              />
             ))}
             {dump.url && (
-              <a
-                className="inline-flex max-w-full items-center gap-0.75 rounded-[4px] bg-muted px-1.5 py-0.25 wrap-anywhere hover:text-foreground"
-                href={dump.url}
-                target="_blank"
-                rel="noopener noreferrer"
-              >
+              <Link href={dump.url} isExternalLink size="sm" maxLines={1}>
                 {linkHost(dump.url)}
-                <ArrowUpRight size={11} />
-              </a>
+              </Link>
             )}
-          </div>
+          </HStack>
         )}
-      </div>
-      <time
-        className="shrink-0 pt-1 text-[11px] text-muted-foreground tabular-nums max-phone:pt-1.5"
-        dateTime={new Date(dump.created_at).toISOString()}
-        title={new Date(dump.created_at).toLocaleString(undefined, {
-          dateStyle: 'medium',
-          timeStyle: 'medium',
-        })}
-      >
-        {timeLabel(dump.created_at, now)}
-      </time>
-      <DropdownMenu>
-        <DropdownMenuTrigger asChild>
-          <Button
+      </VStack>
+      <Text type="supporting" size="xsm" hasTabularNumbers className="shrink-0 pt-2">
+        <time
+          dateTime={new Date(dump.created_at).toISOString()}
+          title={new Date(dump.created_at).toLocaleString(undefined, {
+            dateStyle: 'medium',
+            timeStyle: 'medium',
+          })}
+        >
+          {timeLabel(dump.created_at, now)}
+        </time>
+      </Text>
+      <DropdownMenu
+        hasChevron={false}
+        alignment="end"
+        menuWidth={192}
+        menuMaxHeight={520}
+        renderTrigger={(props) => (
+          <IconButton
+            {...props}
             variant="ghost"
-            size="icon"
-            className="size-7 text-muted-foreground opacity-0 group-hover:opacity-100 focus-visible:opacity-100 data-[state=open]:opacity-100 pointer-coarse:opacity-100 max-phone:size-8"
-            aria-label={`Actions: ${dump.text}`}
-          >
-            <MoreHorizontal size={17} />
-          </Button>
-        </DropdownMenuTrigger>
-        <DropdownMenuContent align="end" className="min-w-48">
-          <DropdownMenuSub>
-            <DropdownMenuSubTrigger>
-              <CalendarDays />
-              {dump.due ? 'Change date' : 'Set a date'}
-            </DropdownMenuSubTrigger>
-            <DropdownMenuSubContent>{dueItems}</DropdownMenuSubContent>
-          </DropdownMenuSub>
-          <DropdownMenuSeparator />
-          <DropdownMenuLabel>Move to</DropdownMenuLabel>
-          <DropdownMenuItem onSelect={() => actions.file(dump, null)}>
-            <ListDot />
-            Inbox{!dump.list && <Check className="ml-auto" />}
-          </DropdownMenuItem>
+            size="sm"
+            label={`Actions: ${dump.text}`}
+            icon={<Icon icon={MoreHorizontal} size="sm" />}
+            className="opacity-0 group-hover:opacity-100 focus-visible:opacity-100 aria-expanded:opacity-100 pointer-coarse:opacity-100"
+          />
+        )}
+      >
+        <DropdownMenuSubMenu label={dump.due ? 'Change date' : 'Set a date'} icon={CalendarDays}>
+          {dueItems}
+        </DropdownMenuSubMenu>
+        <DropdownMenuDivider />
+        <DropdownMenuGroup title="Move to">
+          <DropdownMenuItem
+            label="Inbox"
+            icon={ListDot}
+            endContent={!dump.list ? checked : undefined}
+            onClick={() => actions.file(dump, null)}
+          />
           {lists.map((item) => (
-            <DropdownMenuItem key={item.id} onSelect={() => actions.file(dump, item.id)}>
-              <ListDot color={item.color} />
-              {item.label}
-              {item.id === dump.list && <Check className="ml-auto" />}
-            </DropdownMenuItem>
+            <DropdownMenuItem
+              key={item.id}
+              label={item.label}
+              icon={() => <ListDot color={item.color} />}
+              endContent={item.id === dump.list ? checked : undefined}
+              onClick={() => actions.file(dump, item.id)}
+            />
           ))}
-          <DropdownMenuSeparator />
-          <DropdownMenuItem onSelect={() => actions.complete(dump)}>
-            <Check />
-            {dump.done ? 'Mark incomplete' : 'Mark done'}
-          </DropdownMenuItem>
-          <DropdownMenuItem variant="destructive" onSelect={() => actions.remove(dump)}>
-            <Trash2 />
-            Remove dump
-          </DropdownMenuItem>
-        </DropdownMenuContent>
+        </DropdownMenuGroup>
+        <DropdownMenuDivider />
+        <DropdownMenuItem
+          label={dump.done ? 'Mark incomplete' : 'Mark done'}
+          icon={Check}
+          onClick={() => actions.complete(dump)}
+        />
+        <DropdownMenuItem
+          label="Remove dump"
+          icon={Trash2}
+          variant="destructive"
+          onClick={() => actions.remove(dump)}
+        />
       </DropdownMenu>
       {picking && (
         <DuePicker
@@ -185,6 +216,6 @@ export function DumpCard({
           close={() => setPicking(false)}
         />
       )}
-    </article>
+    </HStack>
   );
 }

@@ -4,21 +4,34 @@ Owns `src/client/`, `index.html`, `public/` and `wrangler.client.jsonc`. For wha
 
 ## Stack and entry points
 
-- React with React Router, Tailwind v4 (tokens and custom variants in `src/client/styles.css`), shadcn/Radix primitives in `components/ui/`, cmdk search, next-themes (Light, Dark, System), lucide-react, sonner, vite-plugin-pwa. Vite builds the client to `dist/client/`.
+- React with React Router, the Astryx design system (`@astryxdesign/core`, see [Design system](#design-system)), Tailwind v4 for the few layout utilities Astryx props don't cover, lucide-react icons, vite-plugin-pwa. Vite builds the client to `dist/client/`.
 - `main.tsx` picks the screen and lazy-loads `App.tsx` (the notebook) or `Marketing.tsx` (the landing page). `store.ts` runs the core's session for the active profile, whose switches reload the page, and exposes `useDumpStore`. `browser-platform.ts` is the browser adapter: IndexedDB, WebSocket, BroadcastChannel and device events. `profiles.ts` keeps the core's notebook registry and the owner keys in localStorage. `registry.ts` answers whether this browser has a notebook.
-- `App.tsx` is the client's largest file: the shell, top bar, views and composer are all in it. Grep for the piece you need instead of reading the whole file.
+- `App.tsx` is large (about 780 lines): the shell, top bar, views and composer are all in it. Grep for the piece you need instead of reading the whole file.
 
 ## Views and look
 
 - No sidebar: the top bar holds the logo (the badge alone on a phone), Sort inbox while unfiled dumps wait, and search with Settings; a list or Done shows a back arrow, its name and count instead. The rest opens from search (⌘K) or a card's list name. → e2e `app.spec.ts` "the top bar holds the logo", "mobile layout fits and lists open from search"
-- Sync shows only when it needs attention ([core.md § Views](core.md#views)): its state beside Settings, with Retry or Sign in, and a dot on the gear. Screen readers always hear it through the same `role="status"`. → e2e `app.spec.ts` "two devices merge offline captures"
+- Sync shows only when it needs attention ([core.md § Views](core.md#views)): its state beside Settings, with Retry or Sign in, and a dot on the gear. Screen readers always hear it through the same `role="status"`, named "Sync status" because every Astryx button carries its own status region. → e2e `app.spec.ts` "two devices merge offline captures"
 - The views are home (`/`), one per list, and Done; any other path shows home. Each reads like a chat, newest at the bottom above a pinned composer. Done has no composer; an empty view centers a larger one. → e2e `app.spec.ts` "a path that names no view shows home"
-- Home ends in Today ([core.md § Data model](core.md#data-model)) under a "done" link. An empty Today says "A clear day." and offers example dumps that fill the composer. → e2e `app.spec.ts` "Today shows what is overdue", `connections.spec.ts` "a device-only notebook never contacts a server"
+- Home ends in Today ([core.md § Data model](core.md#data-model)) under a "done" link. An empty Today says "A clear day." and how to give a dump a day. Empty states carry a small icon and no buttons: the composer is the only action. → e2e `app.spec.ts` "Today shows what is overdue", `connections.spec.ts` "a device-only notebook never contacts a server"
 - Home opens at Today's heading when Today is taller than the screen, so today comes first; other views open at their newest dump, and new dumps scroll into view. → e2e `app.spec.ts` "home opens at Today’s heading"
 - The composer shows the day it read from the draft; its × dumps without one. A card's day and its menu offer the same choices. → e2e `app.spec.ts` "Today shows what is overdue"
 - Backups live in Settings. Clear done and Delete list take a confirm click, since there is no undo. → e2e `app.spec.ts` "prefix filing, search, export", "clearing done removes every completed dump", "deleting a list takes a confirm click"
-- Keep the lime asterisk badge, the off-white and charcoal surfaces, and the lime actions. A list's color is a category accent, not a theme. → no test: compare the screenshots e2e saves in `test-results/`.
+- Keep the lime asterisk badge and the lime actions on Matcha's cream (light) and near-black (dark) surfaces. A list's color is a category accent, not a theme. → no test: compare the screenshots e2e saves in `test-results/`.
 - Motion uses opacity and transform at 120–180ms and honors reduced motion. Every gesture also has a button. The keyboard height and the loading loop are deliberate exceptions, below. → no test: review CSS changes against it.
+
+## Design system
+
+- Every screen is built from Astryx components (`npx astryx component <Name>` prints a component's props). Raw elements remain only where Astryx has nothing: the list colour swatches and `ListDot` (each list's colour is data, painted inline), the `Brand` badge, the hidden username field that lets password managers keep one key per server, and the backup file input. No test checks this; `npx astryx doctor --built .` reviews it.
+- The look comes from the local `dump` theme (`src/themes/dump/dumpTheme.ts`), which extends Matcha: Dump's lime for actions (accent text and icons stay olive in light mode, where lime is unreadable) and Geist, bundled through `dump.fonts.css`, in place of Matcha's Google-hosted fonts, which the CSP blocks. It also gives cards the container radius (18px) where Matcha uses the page radius (42px); buttons stay pills. Its type scale (base 16, ratio 1.25) makes `2xs` 8px, so the smallest text in the app is `size="xsm"` (10px). After editing the source, run `npx astryx theme build src/themes/dump/dumpTheme.ts`. `npx astryx theme` commands regenerate `src/astryx-themes.ts`; never edit it by hand. The theme's background colours are repeated in `index.html` (loading screen, `theme-color`) and the manifest in `vite.config.ts`, so change them together. No test checks the theme.
+- Light, Dark and System live in `lib/colorMode.ts`: it stores the choice under localStorage `dump-theme`, sets the `light`/`dark` class on `<html>` like `public/theme-init.js` does before first paint, and gives `<Theme>` the resolved mode. → e2e `app.spec.ts` "dialogs center, restore focus, and theme preference survives reload"
+- `styles.css` declares the cascade-layer order first, so Tailwind utilities sit above Astryx's styles, and imports Astryx's Tailwind bridge, which turns classes like `text-primary`, `bg-muted` and `bg-accent-bg` into theme tokens. It pins Tailwind's spacing unit to 4px: the spacing utilities left are fixed geometry (dots, the badge, the reading column, the keyboard-pinned composer), while Astryx components take spacing from the theme through props.
+- `cn` (`lib/utils.ts`) only joins class names; it doesn't resolve conflicts, so a component that needs a variant takes a prop for it (`Brand size`, `ListDot size`).
+- Toasts come from `toast()` in `lib/toast.tsx`, which code outside React (the service-worker update prompt) can call too; they sit at the top end below the top bar. Astryx repeats each toast in a hidden announcement, so tests look for toast text inside the Notifications region.
+- Links go through `components/RouterLink.tsx` (Astryx's `LinkProvider` in `main.tsx`), so app paths navigate without a reload.
+- Astryx's closed menus stay in the DOM, hidden; a dump card's text therefore includes its menu's labels, and tests check the card's list chip ("Open Ideas") rather than its text.
+- Astryx centers dialogs and clears the palette's highlight on every query. The ⌘K palette is pinned near the top instead, so its field stays still while results change, and `QueryInput` (`components/SearchDialog.tsx`) highlights a typed query's first match, so Enter opens it even before the search settles. Other dialogs are centered. → e2e `app.spec.ts` "dialogs center, restore focus, and theme preference survives reload"
+- Form fields don't use `isRequired`: it prints a "Required" tag, and every form here already disables its button until the field is filled. No test checks this.
 
 ## First run, onboarding, owner keys
 
@@ -29,7 +42,7 @@ Owns `src/client/`, `index.html`, `public/` and `wrangler.client.jsonc`. For wha
 
 ## Content Security Policy
 
-The static host sends a CSP from `public/_headers` that allows only the app's own scripts. Keep the client free of inline and third-party scripts; this is why `public/theme-init.js` is a separate file. → e2e `app.spec.ts` "…under the CSP"
+The static host sends a CSP from `public/_headers` that allows only the app's own scripts. Keep the client free of inline and third-party scripts; this is why `public/theme-init.js` is a separate file. Fonts and stylesheets must be self-hosted too (`font-src 'self'`), so bundle fonts with `@fontsource` instead of linking a font service. → e2e `app.spec.ts` "…under the CSP"
 
 ## Phone keyboard
 

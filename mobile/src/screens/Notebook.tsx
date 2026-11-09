@@ -8,10 +8,10 @@ import {
   Text,
   View,
 } from 'react-native';
-import { DAY_EXAMPLES, dumpsIn, needsAttention, notebook } from '../../../src/core/views';
+import { dumpsIn, needsAttention, notebook } from '../../../src/core/views';
 import { prefixFor } from '../../../src/shared/schema';
 import type { ScreenProps } from '../App';
-import { Composer, KeyboardSpace, type ComposerHandle } from '../Composer';
+import { Composer, KeyboardSpace } from '../Composer';
 import { DumpRow, failed } from '../DumpRow';
 import { useSession, useSnapshot } from '../notebook';
 import { useColors } from '../theme';
@@ -34,7 +34,6 @@ export function NotebookScreen({ navigation, route }: ScreenProps<'Notebook'>) {
   const sync = snapshot.sync;
   const storageError = snapshot.storageError;
   const listRef = useRef<FlatList<Row>>(null);
-  const composer = useRef<ComposerHandle>(null);
   const [highlight, setHighlight] = useState(reveal);
 
   useEffect(() => {
@@ -167,28 +166,11 @@ export function NotebookScreen({ navigation, route }: ScreenProps<'Notebook'>) {
               </View>
             ) : item.type === 'quiet' ? (
               <View style={[styles.quiet, { borderColor: colors.border }]}>
+                <Icon name={icons.sun} size={18} color={colors.muted} />
                 <Text style={[styles.quietTitle, { color: colors.foreground }]}>A clear day.</Text>
                 <Text style={[styles.quietMessage, { color: colors.muted }]}>
-                  Nothing due and nothing dumped yet. Give a dump a day, and it waits for you here
-                  when the day comes.
+                  Nothing due today. Give a dump a day and it waits here.
                 </Text>
-                <View style={styles.examples}>
-                  {DAY_EXAMPLES.map((example) => (
-                    <Pressable
-                      key={example}
-                      onPress={() => composer.current?.fill(example)}
-                      accessibilityRole="button"
-                      accessibilityHint="Puts it in the composer"
-                      style={[
-                        styles.example,
-                        { backgroundColor: colors.card, borderColor: colors.border },
-                      ]}
-                    >
-                      <Icon name={icons.calendar} size={12} color={colors.muted} />
-                      <Text style={[styles.exampleText, { color: colors.muted }]}>{example}</Text>
-                    </Pressable>
-                  ))}
-                </View>
               </View>
             ) : item.type === 'done' ? (
               <Pressable
@@ -231,7 +213,6 @@ export function NotebookScreen({ navigation, route }: ScreenProps<'Notebook'>) {
       ) : (
         <>
           <Composer
-            ref={composer}
             book={book}
             list={place.kind === 'list' ? place.id : null}
             ready={snapshot.ready}
@@ -316,23 +297,6 @@ const styles = StyleSheet.create({
   },
   quietTitle: { fontSize: 17, fontWeight: '600' },
   quietMessage: { fontSize: 14, lineHeight: 20, textAlign: 'center' },
-  examples: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    justifyContent: 'center',
-    gap: 8,
-    marginTop: 8,
-  },
-  example: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 5,
-    paddingHorizontal: 10,
-    paddingVertical: 6,
-    borderRadius: 8,
-    borderWidth: StyleSheet.hairlineWidth,
-  },
-  exampleText: { fontSize: 13 },
   doneLink: {
     flexDirection: 'row',
     alignItems: 'center',

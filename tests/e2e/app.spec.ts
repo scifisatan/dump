@@ -15,7 +15,9 @@ test('a returning visitor opens the notebook at / under the CSP, without the lan
   const response = await page.goto('/');
   expect(response?.headers()['content-security-policy']).toContain("script-src 'self'");
   await expect(page.getByRole('textbox', { name: 'Capture a thought' })).toBeEnabled();
-  await expect(page.getByRole('status')).toContainText('Saved · local development');
+  await expect(page.getByRole('status', { name: 'Sync status' })).toContainText(
+    'Saved · local development',
+  );
   await expect(page.getByRole('progressbar', { name: 'Opening Dump' })).toBeHidden();
   expect(landingCode).toEqual([]);
   expect(violations).toEqual([]);
@@ -36,7 +38,8 @@ test('a slow load shows the loading screen in the saved theme, then the notebook
   const loading = page.getByRole('progressbar', { name: 'Opening Dump' });
   await expect(loading).toHaveCSS('opacity', '1');
   await expect(page.locator('html')).toHaveClass(/dark/);
-  await expect(loading).toHaveCSS('background-color', 'rgb(25, 27, 23)');
+  // The dump theme's dark body colour, #12140e (index.html repeats it for the loading screen).
+  await expect(loading).toHaveCSS('background-color', 'rgb(18, 20, 14)');
   await page.screenshot({ path: 'test-results/loading-dark.png' });
   arrive();
   await expect(page.getByRole('textbox', { name: 'Capture a thought' })).toBeEnabled();
@@ -66,7 +69,9 @@ test('two devices merge offline captures, persist through reload, and honor dele
   await a.getByRole('textbox', { name: 'Capture a thought' }).fill(first);
   await a.getByRole('button', { name: 'Save dump', exact: true }).click();
   await expect(a.getByRole('article').getByText(first, { exact: true })).toHaveCount(1);
-  await expect(a.getByRole('status')).toContainText('Offline · saved here');
+  await expect(a.getByRole('status', { name: 'Sync status' })).toContainText(
+    'Offline · saved here',
+  );
   await a.reload();
   await expect(a.getByRole('article').getByText(first, { exact: true })).toBeVisible();
   await b.getByRole('textbox', { name: 'Capture a thought' }).fill(second);
@@ -110,7 +115,12 @@ test('prefix filing, search, export and additive restore work', async ({ page })
   const path = await download.path();
   expect(path).toBeTruthy();
   await page.locator('input[type="file"]').setInputFiles(path!);
-  await expect(page.getByText('0 dumps restored. Existing items were kept.')).toBeVisible();
+  // Astryx also repeats each toast in a screen-reader announcement, so look inside the toasts.
+  await expect(
+    page
+      .getByRole('region', { name: 'Notifications' })
+      .getByText('0 dumps restored. Existing items were kept.'),
+  ).toBeVisible();
 });
 
 async function fakeJev(page: Page, list: string | null, delay: number) {
@@ -135,7 +145,7 @@ test('captures appear at once and Jev files them into a list afterwards', async 
   const card = page.getByRole('article').filter({ hasText: text });
   await expect(input).toHaveValue('');
   await expect(card).toContainText('Sorting…');
-  await expect(card).toContainText('Buy');
+  await expect(card.getByRole('button', { name: 'Open Buy' })).toBeVisible();
   await expect(card).not.toContainText('Sorting…');
   await card.getByRole('button', { name: 'Open Buy' }).click();
   await expect(page.getByRole('article').getByText(text, { exact: true })).toBeVisible();
@@ -156,10 +166,16 @@ test('an unsure Jev defaults to To do, and filing by hand beats a late answer', 
   await input.press('Enter');
   await page.getByRole('button', { name: `Actions: ${manual}`, exact: true }).click();
   await page.getByRole('menuitem', { name: 'Ideas' }).click();
-  await expect(page.getByRole('article').filter({ hasText: unsure })).toContainText('To do');
+  // A card's closed actions menu stays in its DOM, so check the list chip, not the card's text.
+  await expect(
+    page
+      .getByRole('article')
+      .filter({ hasText: unsure })
+      .getByRole('button', { name: 'Open To do' }),
+  ).toBeVisible();
   const card = page.getByRole('article').filter({ hasText: manual });
-  await expect(card).toContainText('Ideas');
-  await expect(card).not.toContainText('To do');
+  await expect(card.getByRole('button', { name: 'Open Ideas' })).toBeVisible();
+  await expect(card.getByRole('button', { name: 'Open To do' })).toHaveCount(0);
 });
 
 test('without Jev, captures stay in the inbox unfiled', async ({ page }) => {
@@ -174,11 +190,10 @@ test('without Jev, captures stay in the inbox unfiled', async ({ page }) => {
   await expect(card).toBeVisible();
   await page.waitForTimeout(500);
   await expect(card).not.toContainText('Sorting…');
-  await expect(card).not.toContainText('To do');
+  await expect(card.getByRole('button', { name: /^Open / })).toHaveCount(0);
   await page.getByRole('button', { name: 'Search your space' }).click();
   const lists = await page
-    .locator('[cmdk-group]')
-    .filter({ has: page.getByText('Lists', { exact: true }) })
+    .getByRole('group', { name: 'Lists', exact: true })
     .getByRole('option')
     .filter({ hasNotText: 'New list' })
     .count();
@@ -282,7 +297,9 @@ test('live sync reaches an open device without polling', async ({ browser, reque
   const b = await bContext.newPage();
   await a.goto('/');
   await b.goto('/');
-  await expect(b.getByRole('status')).toContainText('Saved · local development');
+  await expect(b.getByRole('status', { name: 'Sync status' })).toContainText(
+    'Saved · local development',
+  );
   const text = `Live sync ${crypto.randomUUID().slice(0, 8)}`;
   await a.getByRole('textbox', { name: 'Capture a thought' }).fill(text);
   await a.getByRole('button', { name: 'Save dump', exact: true }).click();
@@ -352,21 +369,40 @@ test('dialogs center, restore focus, and theme preference survives reload', asyn
   await page.goto('/');
   const search = page.getByRole('button', { name: 'Search your space' });
   await search.click();
-  const dialog = page.getByRole('dialog');
-  await expect(dialog).toBeVisible();
+  await expect(page.getByRole('dialog')).toBeVisible();
   await expect(page.getByRole('combobox', { name: 'Search dumps' })).toBeFocused();
-  const centered = await dialog.evaluate((element) => {
-    const rect = element.getBoundingClientRect();
-    return (
-      Math.abs(rect.x + rect.width / 2 - innerWidth / 2) < 2 &&
-      Math.abs(rect.y + rect.height / 2 - innerHeight / 2) < 2
-    );
-  });
-  expect(centered).toBe(true);
   await page.keyboard.press('Escape');
   await expect(search).toBeFocused();
-  await page.getByRole('button', { name: 'Settings', exact: true }).click();
-  await page.getByRole('button', { name: 'Dark', exact: true }).click();
+  // The palette is pinned near the top, and Enter right after typing opens the first match.
+  await search.click();
+  const palette = page.getByRole('dialog', { name: 'Find something in your space' });
+  await page.keyboard.type('Settings');
+  await expect
+    .poll(() =>
+      palette.evaluate((element) => {
+        const rect = element.getBoundingClientRect();
+        return rect.y + rect.height / 2 < innerHeight / 2 - 40;
+      }),
+    )
+    .toBe(true);
+  await page.keyboard.press('Enter');
+  await expect(palette).toBeHidden();
+  // Standard dialogs center.
+  const dialog = page.getByRole('dialog');
+  await expect(dialog).toBeVisible();
+  // Astryx dialogs ease in, so wait until the dialog settles in the middle.
+  await expect
+    .poll(() =>
+      dialog.evaluate((element) => {
+        const rect = element.getBoundingClientRect();
+        return (
+          Math.abs(rect.x + rect.width / 2 - innerWidth / 2) < 2 &&
+          Math.abs(rect.y + rect.height / 2 - innerHeight / 2) < 2
+        );
+      }),
+    )
+    .toBe(true);
+  await page.getByRole('radio', { name: 'Dark', exact: true }).click();
   await expect(page.locator('html')).toHaveClass(/dark/);
   await page.keyboard.press('Escape');
   await page.reload();
@@ -424,7 +460,7 @@ test('marketing is separate from notebook initialization and preserves the origi
   await page.setViewportSize({ width: 390, height: 844 });
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
   await page.screenshot({ path: 'test-results/marketing-mobile.png', fullPage: true });
-  await page.getByRole('link', { name: 'Open your space' }).click();
+  await page.getByRole('link', { name: 'Open your space' }).first().click();
   await expect(page.getByRole('textbox', { name: 'Capture a thought' })).toBeEnabled();
   await expect(page.getByRole('progressbar', { name: 'Opening Dump' })).toBeHidden();
   await context.close();
@@ -438,13 +474,15 @@ test('the top bar holds the logo, Sort inbox while dumps wait, and search with S
     isMobile: true,
     hasTouch: true,
   });
-  const header = page.locator('header');
+  const header = page.getByRole('navigation', { name: 'Dump' });
   const logo = header.getByRole('link', { name: 'Dump home' });
-  await expect(logo.locator(':scope > span > span').first()).toBeVisible();
-  await expect(logo.locator(':scope > span > span').nth(1)).toBeHidden();
+  await expect(logo).toBeVisible();
+  await expect(logo.getByText('dump.', { exact: true })).toBeHidden();
   await expect(header.getByRole('button', { name: 'Search your space' })).toBeVisible();
   await expect(header.getByRole('button', { name: 'Settings', exact: true })).toBeVisible();
-  await expect(page.getByRole('status')).toHaveClass(/sr-only/);
+  const status = page.getByRole('status', { name: 'Sync status' });
+  await expect(status).toHaveText('Saved on this device');
+  expect((await status.boundingBox())?.width).toBeLessThanOrEqual(1);
   await expect(header.getByRole('button', { name: 'Sort inbox' })).toHaveCount(0);
   await capture(page, `waiting for a home ${crypto.randomUUID().slice(0, 8)}`);
   await expect(header.getByRole('button', { name: 'Sort inbox' })).toBeVisible();
@@ -455,7 +493,7 @@ test('the top bar holds the logo, Sort inbox while dumps wait, and search with S
   await page.getByRole('option', { name: 'Done', exact: true }).click();
   await expect(header.getByRole('link', { name: 'Back to your space' })).toBeVisible();
   await expect(header.getByRole('heading', { level: 1 })).toHaveText('Done');
-  await expect(header).toContainText('Done0');
+  await expect(header).toContainText(/Done\s*0/);
   await expect(logo).toHaveCount(0);
   await page.context().close();
 });
@@ -497,10 +535,10 @@ test('home opens at Today’s heading when Today is taller than the screen, else
   // Where the scrolling view stands, and where Today's heading is in it.
   const position = () =>
     page.evaluate(() => {
-      const scroller = [...document.querySelectorAll('main *')].find(
-        (element) => getComputedStyle(element).overflowY === 'auto',
-      )!;
-      const today = document.querySelector('section[aria-label="Today"]');
+      const today = document.querySelector('[aria-label="Today"]');
+      let scroller = (today ?? document.querySelector('article'))!.parentElement!;
+      while (!/auto|scroll/.test(getComputedStyle(scroller).overflowY))
+        scroller = scroller.parentElement!;
       return {
         top: scroller.scrollTop,
         bottom: scroller.scrollHeight - scroller.clientHeight,
@@ -513,7 +551,7 @@ test('home opens at Today’s heading when Today is taller than the screen, else
   await page.getByRole('button', { name: 'Complete: already finished' }).click();
   await capture(page, 'one open thought');
   // Reload only once this device has saved, or the last captures are lost.
-  const saved = page.getByRole('status');
+  const saved = page.getByRole('status', { name: 'Sync status' });
   await expect(page.getByRole('article').getByText('one open thought')).toBeVisible();
   await expect(saved).toHaveText('Saved on this device');
   await page.reload();
